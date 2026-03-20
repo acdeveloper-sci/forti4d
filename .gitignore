@@ -1,8 +1,13 @@
 # Outputs del pipeline
 *.csv
-*.md
+*.dot
+*.svg
+*.png
+RESUMEN_PROYECTO.md
+
 
 # Directorios de auditoría y análisis
+results/
 audit/
 bloques/
 
