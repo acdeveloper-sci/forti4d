@@ -76,3 +76,6 @@ One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
 - `COMMON_USO` may contain multiple rows per unit (one per block). These are
   aggregated: `N_Common_Bloques` = count of distinct blocks, `Common_Bloques`
   = sorted semicolon-separated names.
+- `reporte_clones.csv` (produced by `clones.py`) is not currently joined here.
+  Clone state per unit is read directly by `priorizacion.py`. A future
+  integration could add `Estado_Clon` and `N_Copias` columns to this report.

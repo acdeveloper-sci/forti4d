@@ -74,8 +74,10 @@ python3 pipeline.py --project ../myproject --output out/ --from complejidad --qu
 | `common_blocks` | `common_blocks.py` | Detect COMMON block coupling |
 | `alcanzabilidad` | `alcanzabilidad.py` | Dead code detection from entry points |
 | `sloc` | `sloc.py` | Precise SLOC count per unit |
+| `clones` | `clones.py` | Detect identical/similar/diverged duplicate units |
 | `consolidar` | `consolidar.py` | Join all reports into `reporte_consolidado.csv` |
 | `grafo_visual` | `grafo_visual.py` | Generate call graph DOT files |
+| `priorizacion` | `priorizacion.py` | Compute composite risk score and rank units for migration |
 
 ---
 
@@ -109,7 +111,7 @@ Terminal output includes per-step timing and a final summary table:
 === Fortran Static Analysis Pipeline ===
 Project : ../athys/mercedes/
 Output  : results/
-Steps   : 13
+Steps   : 15
 
 ────────────────────────────────────────────────────────────
 [1/13] inventario  —  Build unit inventory from source files
@@ -124,5 +126,5 @@ Summary  —  45.1s total
   ✓  dependencias            8.7s
   ...
 
-All 13 steps completed successfully.
+All 15 steps completed successfully.
 ```
