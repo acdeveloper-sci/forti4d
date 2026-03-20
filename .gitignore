@@ -1,0 +1,12 @@
+# Outputs del pipeline
+*.csv
+*.md
+
+# Directorios de auditoría y análisis
+audit/
+bloques/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
