@@ -41,6 +41,7 @@ STEPS = [
     ("clones",              "clones.py",               "Detect identical/similar/diverged duplicate units"),
     ("consolidar",          "consolidar.py",           "Join all reports into reporte_consolidado.csv"),
     ("grafo_visual",        "grafo_visual.py",         "Generate call graph DOT files"),
+    ("priorizacion",        "priorizacion.py",         "Compute composite risk score and rank units for migration"),
 ]
 
 STEP_NAMES = [s[0] for s in STEPS]
