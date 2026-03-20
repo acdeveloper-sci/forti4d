@@ -10,25 +10,27 @@ data areas introduce.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `RUTA_AUDIT` | `"audit/"` | Directory containing `*_DEBUG.csv` files |
-| `SALIDA_USO` | `"common_uso.csv"` | Per-unit COMMON usage |
-| `SALIDA_ACOPLAMIENTO` | `"common_acoplamiento.csv"` | Per-block coupling risk |
+| `RUTA_AUDIT` | `RUTA_RESULTADOS / "audit"` | Directory containing `*_DEBUG.csv` files |
+| `SALIDA_USO` | `RUTA_RESULTADOS / "common_uso.csv"` | Per-unit COMMON usage |
+| `SALIDA_ACOPLAMIENTO` | `RUTA_RESULTADOS / "common_acoplamiento.csv"` | Per-block coupling risk |
 | `NOMBRE_BLANK` | `"(BLANK)"` | Label for unnamed (blank) COMMON |
 
 ---
 
 ## Inputs
 
-- `audit/<filename>_DEBUG.csv` for each source file (reads `COMMON_STMT` lines)
-- `reporte_inventario.csv` (via `cargar_inventario()`)
+- `<FORT_OUT>/audit/<filename>_DEBUG.csv` for each source file (reads `COMMON_STMT` lines)
+- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
 
 ---
 
 ## Outputs
 
-### `common_uso.csv`
+### `<FORT_OUT>/common_uso.csv`
 One row per (unit, COMMON block) pair.
 
 | Column | Description |
@@ -39,7 +41,7 @@ One row per (unit, COMMON block) pair.
 | `Bloque` | COMMON block name, or `(BLANK)` for unnamed COMMON |
 | `Apariciones` | Number of COMMON statements referencing this block in this unit |
 
-### `common_acoplamiento.csv`
+### `<FORT_OUT>/common_acoplamiento.csv`
 One row per COMMON block, sorted by `N_Unidades` descending.
 
 | Column | Description |

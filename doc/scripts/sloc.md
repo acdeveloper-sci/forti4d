@@ -10,21 +10,23 @@ counts per unit using scope resolution.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `CARPETA_CODIGO` | from `inventario.py` | Path to the Fortran source directory |
-| `SALIDA_CSV` | `"reporte_sloc.csv"` | Output file |
+| `CARPETA_CODIGO` | `FORT_SRC` env var → `../athys/mercedes/` | Path to the Fortran source directory |
+| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_sloc.csv"` | Output file |
 
 ---
 
 ## Inputs
 
 - Fortran source files in `CARPETA_CODIGO`
-- `reporte_inventario.csv` (via `cargar_inventario()`)
+- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
 
 ---
 
-## Output: `reporte_sloc.csv`
+## Output: `<FORT_OUT>/reporte_sloc.csv`
 
 One row per program unit, sorted by `SLOC_neto` descending.
 

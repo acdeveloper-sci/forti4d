@@ -9,23 +9,25 @@ and Fan-Out profile from the call graph.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `ARCHIVO_IMPACTO` | `"dep_03_matriz_impacto.csv"` | Input: Fan-In/Fan-Out per unit |
-| `ARCHIVO_INVENTARIO` | `"reporte_inventario.csv"` | Input: unit types (to detect IMPLICIT-MAIN) |
-| `ARCHIVO_SALIDA` | `"analisis_nodos_criticos.csv"` | Output |
+| `ARCHIVO_IMPACTO` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Input: Fan-In/Fan-Out per unit |
+| `ARCHIVO_INVENTARIO` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Input: unit types (to detect IMPLICIT-MAIN) |
+| `ARCHIVO_SALIDA` | `RUTA_RESULTADOS / "analisis_nodos_criticos.csv"` | Output |
 | `UMBRAL_CRITICO` | `10` | Min Fan-In to classify a file as `NODO_CRITICO` |
 
 ---
 
 ## Inputs
 
-- `dep_03_matriz_impacto.csv`
-- `reporte_inventario.csv`
+- `<FORT_OUT>/dep_03_matriz_impacto.csv`
+- `<FORT_OUT>/reporte_inventario.csv`
 
 ---
 
-## Output: `analisis_nodos_criticos.csv`
+## Output: `<FORT_OUT>/analisis_nodos_criticos.csv`
 
 One row per source file.
 

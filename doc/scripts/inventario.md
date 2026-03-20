@@ -6,16 +6,18 @@ Foundation of the entire pipeline. Scans all Fortran source files and builds
 a complete inventory of every program unit: its type, parent unit, line range,
 and audit flags for legacy constructs and I/O statements.
 
-All other scripts depend on `reporte_inventario.csv`.
+All other scripts depend on `<FORT_OUT>/reporte_inventario.csv`.
 
 ---
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `CARPETA_CODIGO` | `"../athys/mercedes/"` | Path to the Fortran source directory |
-| `ARCHIVO_SALIDA` | `"reporte_inventario.csv"` | Output file |
+| `CARPETA_CODIGO` | `FORT_SRC` env var → `../athys/mercedes/` | Path to the Fortran source directory |
+| `ARCHIVO_SALIDA` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Output file |
 
 ---
 
@@ -25,7 +27,7 @@ Fortran source files in `CARPETA_CODIGO`. Processes `.f90`, `.f95`, `.f`, `.for`
 
 ---
 
-## Output: `reporte_inventario.csv`
+## Output: `<FORT_OUT>/reporte_inventario.csv`
 
 One row per program unit found.
 

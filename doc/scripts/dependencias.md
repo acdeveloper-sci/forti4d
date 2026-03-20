@@ -11,21 +11,23 @@ no known definition (orphans).
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `ARCHIVO_INVENTARIO` | `"reporte_inventario.csv"` | Input: unit inventory |
-| `OUT_AMBIGUOS` | `"dep_00_ambiguedades.csv"` | Units with the same name in multiple files |
-| `OUT_MAESTRO` | `"dep_01_datos_maestros.csv"` | All resolved call/use relationships |
-| `OUT_GRAFO` | `"dep_02_grafo_unidades.csv"` | Resolved call graph edges |
-| `OUT_IMPACTO` | `"dep_03_matriz_impacto.csv"` | Fan-In and Fan-Out per unit |
-| `OUT_HUERFANOS` | `"dep_04_externos_huerfanos.csv"` | References with no known definition |
-| `OUT_ARCHIVOS` | `"dep_05_dependencia_archivos.csv"` | File-level dependency summary |
+| `ARCHIVO_INVENTARIO` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Input: unit inventory |
+| `OUT_AMBIGUOS` | `RUTA_RESULTADOS / "dep_00_ambiguedades.csv"` | Units with the same name in multiple files |
+| `OUT_MAESTRO` | `RUTA_RESULTADOS / "dep_01_datos_maestros.csv"` | All resolved call/use relationships |
+| `OUT_GRAFO` | `RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"` | Resolved call graph edges |
+| `OUT_IMPACTO` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Fan-In and Fan-Out per unit |
+| `OUT_HUERFANOS` | `RUTA_RESULTADOS / "dep_04_externos_huerfanos.csv"` | References with no known definition |
+| `OUT_ARCHIVOS` | `RUTA_RESULTADOS / "dep_05_dependencia_archivos.csv"` | File-level dependency summary |
 
 ---
 
 ## Inputs
 
-- `reporte_inventario.csv`
+- `<FORT_OUT>/reporte_inventario.csv`
 - Fortran source files in `CARPETA_CODIGO`
 
 ---

@@ -10,21 +10,23 @@ as reachable, unreachable, or an entry point itself.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `GRAFO_CSV` | `"dep_02_grafo_unidades.csv"` | Input: resolved call graph |
-| `SALIDA_CSV` | `"reporte_alcanzabilidad.csv"` | Output |
+| `GRAFO_CSV` | `RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"` | Input: resolved call graph |
+| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"` | Output |
 
 ---
 
 ## Inputs
 
-- `dep_02_grafo_unidades.csv`
-- `reporte_inventario.csv` (via `cargar_inventario()`)
+- `<FORT_OUT>/dep_02_grafo_unidades.csv`
+- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
 
 ---
 
-## Output: `reporte_alcanzabilidad.csv`
+## Output: `<FORT_OUT>/reporte_alcanzabilidad.csv`
 
 One row per program unit.
 
@@ -73,5 +75,5 @@ of the inventory, so the output always shows the human-readable name.
 - A corpus with multiple executables (several PROGRAM / IMPLICIT-MAIN files
   in the same directory) will have multiple independent BFS roots. A unit
   is `ALCANZABLE` if reachable from *any* of them.
-- `reporte_alcanzabilidad.csv` is consumed by `consolidar.py` and
+- `<FORT_OUT>/reporte_alcanzabilidad.csv` is consumed by `consolidar.py` and
   `grafo_visual.py`.

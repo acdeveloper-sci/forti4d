@@ -10,16 +10,18 @@ derived metric `CC_SLOC`.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `INVENTARIO` | `"reporte_inventario.csv"` | Base — defines the row set |
-| `SLOC` | `"reporte_sloc.csv"` | Size and comment density |
-| `COMPLEJIDAD` | `"reporte_complejidad.csv"` | McCabe CC |
-| `IMPACTO` | `"dep_03_matriz_impacto.csv"` | Fan-In / Fan-Out |
-| `DENSIDAD` | `"reporte_densidad.csv"` | Statement density profiles |
-| `ALCANZ` | `"reporte_alcanzabilidad.csv"` | Reachability status |
-| `COMMON_USO` | `"common_uso.csv"` | COMMON block usage |
-| `SALIDA_CSV` | `"reporte_consolidado.csv"` | Output |
+| `INVENTARIO` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Base — defines the row set |
+| `SLOC` | `RUTA_RESULTADOS / "reporte_sloc.csv"` | Size and comment density |
+| `COMPLEJIDAD` | `RUTA_RESULTADOS / "reporte_complejidad.csv"` | McCabe CC |
+| `IMPACTO` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Fan-In / Fan-Out |
+| `DENSIDAD` | `RUTA_RESULTADOS / "reporte_densidad.csv"` | Statement density profiles |
+| `ALCANZ` | `RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"` | Reachability status |
+| `COMMON_USO` | `RUTA_RESULTADOS / "common_uso.csv"` | COMMON block usage |
+| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_consolidado.csv"` | Output |
 
 All sources except `INVENTARIO` are optional — missing files produce empty
 values for their columns without stopping the script.
@@ -32,7 +34,7 @@ All reports listed in the configuration table above.
 
 ---
 
-## Output: `reporte_consolidado.csv`
+## Output: `<FORT_OUT>/reporte_consolidado.csv`
 
 One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
 
