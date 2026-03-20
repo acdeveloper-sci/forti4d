@@ -3,16 +3,18 @@ pipeline.py
 Executes the full static analysis pipeline in dependency order.
 
 Usage:
-  python pipeline.py                        # run all steps
-  python pipeline.py --list                 # show available steps
-  python pipeline.py --from complejidad     # start from a specific step
-  python pipeline.py --only sloc consolidar # run only these steps
-  python pipeline.py --skip grafo_visual    # skip specific steps
-  python pipeline.py --continue-on-error    # don't stop on first failure
-  python pipeline.py --quiet                # only show step names and results
+  python pipeline.py                                      # run all steps
+  python pipeline.py --list                               # show available steps
+  python pipeline.py --project ../myproject --output out/ # set source and output dirs
+  python pipeline.py --from complejidad                   # start from a specific step
+  python pipeline.py --only sloc consolidar               # run only these steps
+  python pipeline.py --skip grafo_visual                  # skip specific steps
+  python pipeline.py --continue-on-error                  # don't stop on first failure
+  python pipeline.py --quiet                              # only show step names and results
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -28,7 +30,7 @@ STEPS = [
     ("inventario",          "inventario.py",          "Build unit inventory from source files"),
     ("dependencias",        "dependencias.py",         "Build call graph and compute Fan-In/Fan-Out"),
     ("perfilador",          "perfilador.py",           "Classify statements and produce audit/ DEBUG files"),
-    ("bloques",             None,                      "Block topology analysis (one file per source, to audit/)"),
+    ("bloques",             None,                      "Block topology analysis (one file per source, to output/)"),
     ("analisis_estructura", "analisis_estructura.py",  "Classify files by architectural role"),
     ("analisis_cruzado",    "analisis_cruzado.py",     "Assign migration strategy per unit"),
     ("resumen_ejecutivo",   "resumen_ejecutivo.py",    "Generate executive summary"),
@@ -42,15 +44,12 @@ STEPS = [
 
 STEP_NAMES = [s[0] for s in STEPS]
 
-# audit/ directory — written by perfilador, read by bloques/complejidad/common_blocks
-RUTA_AUDIT = Path("audit")
-
 
 # =============================================================================
 # STEP RUNNERS
 # =============================================================================
 
-def run_script(script: str, quiet: bool) -> tuple:
+def run_script(script: str, quiet: bool, env: dict) -> tuple:
     """
     Runs a Python script as a subprocess.
     Returns (success: bool, elapsed: float, output: str).
@@ -59,30 +58,32 @@ def run_script(script: str, quiet: bool) -> tuple:
     t0  = time.time()
 
     if quiet:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         output = result.stdout + result.stderr
     else:
-        result = subprocess.run(cmd)
+        result = subprocess.run(cmd, env=env)
         output = ""
 
     elapsed = time.time() - t0
     return result.returncode == 0, elapsed, output
 
 
-def run_bloques(quiet: bool) -> tuple:
+def run_bloques(quiet: bool, env: dict) -> tuple:
     """
-    Batch-runs analisis_bloques_v8.py for every *_DEBUG.csv in audit/.
-    Output is written to bloques/<name>_bloques.txt.
+    Batch-runs analisis_bloques_v8.py for every *_DEBUG.csv in <output>/audit/.
+    Output is written to <output>/bloques/<name>_bloques.txt.
     """
-    if not RUTA_AUDIT.exists():
-        return False, 0.0, f"audit/ directory not found — run 'perfilador' first"
+    ruta_audit  = Path(env.get("FORT_OUT", "results/")) / "audit"
+    bloques_dir = Path(env.get("FORT_OUT", "results/")) / "bloques"
 
-    debug_files = sorted(RUTA_AUDIT.glob("*_DEBUG.csv"))
+    if not ruta_audit.exists():
+        return False, 0.0, f"{ruta_audit} not found — run 'perfilador' first"
+
+    debug_files = sorted(ruta_audit.glob("*_DEBUG.csv"))
     if not debug_files:
-        return False, 0.0, "No *_DEBUG.csv files found in audit/"
+        return False, 0.0, f"No *_DEBUG.csv files found in {ruta_audit}"
 
-    bloques_dir = Path("bloques")
-    bloques_dir.mkdir(exist_ok=True)
+    bloques_dir.mkdir(parents=True, exist_ok=True)
 
     t0      = time.time()
     errores = []
@@ -92,7 +93,7 @@ def run_bloques(quiet: bool) -> tuple:
         salida = bloques_dir / f"{nombre}_bloques.txt"
 
         cmd = [sys.executable, "analisis_bloques_v8.py", str(debug_file)]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
         if result.returncode == 0:
             salida.write_text(result.stdout, encoding="utf-8")
@@ -104,7 +105,7 @@ def run_bloques(quiet: bool) -> tuple:
     e       = len(errores)
 
     if not quiet:
-        print(f"  Processed {n} files → bloques/  ({e} errors)")
+        print(f"  Processed {n} files → {bloques_dir}  ({e} errors)")
 
     if errores:
         return False, elapsed, "\n".join(errores)
@@ -162,6 +163,14 @@ def main():
         help="List available steps and exit."
     )
     parser.add_argument(
+        "--project", metavar="DIR",
+        help="Path to the Fortran source directory to analyze (sets FORT_SRC)."
+    )
+    parser.add_argument(
+        "--output", metavar="DIR",
+        help="Directory where all output files will be written (sets FORT_OUT)."
+    )
+    parser.add_argument(
         "--from", dest="from_step", metavar="STEP",
         help="Start execution from this step (inclusive)."
     )
@@ -183,13 +192,25 @@ def main():
     )
     args = parser.parse_args()
 
+    # Build subprocess environment — inherit current env, then override
+    env = os.environ.copy()
+    if args.project:
+        env["FORT_SRC"] = str(Path(args.project).resolve())
+    if args.output:
+        env["FORT_OUT"] = str(Path(args.output))
+
     # --list
     if args.list:
+        fort_src = env.get("FORT_SRC", "../athys/mercedes/")
+        fort_out = env.get("FORT_OUT", "results/")
         print(f"\n{'Step':<22} {'Script':<28} Description")
         print("─" * 78)
         for name, script, desc in STEPS:
             s = script if script else "analisis_bloques_v8.py (batch)"
             print(f"  {name:<20} {s:<28} {desc}")
+        print()
+        print(f"  FORT_SRC  →  {fort_src}")
+        print(f"  FORT_OUT  →  {fort_out}")
         print()
         return
 
@@ -222,8 +243,12 @@ def main():
         return
 
     # Header
+    fort_src = env.get("FORT_SRC", "../athys/mercedes/")
+    fort_out = env.get("FORT_OUT", "results/")
     print(f"\n{BOLD}=== Fortran Static Analysis Pipeline ==={RESET}")
-    print(f"Steps to run: {len(steps_to_run)}")
+    print(f"Project : {fort_src}")
+    print(f"Output  : {fort_out}")
+    print(f"Steps   : {len(steps_to_run)}")
     print()
 
     # Execute
@@ -236,7 +261,7 @@ def main():
 
         if script is None:
             # Special step: bloques batch
-            success, elapsed, msg = run_bloques(args.quiet)
+            success, elapsed, msg = run_bloques(args.quiet, env)
             if not args.quiet and msg:
                 print(f"  {msg}")
         else:
@@ -244,7 +269,7 @@ def main():
                 print(f"{RED}  Script not found: {script}{RESET}")
                 success, elapsed = False, 0.0
             else:
-                success, elapsed, output = run_script(script, args.quiet)
+                success, elapsed, output = run_script(script, args.quiet, env)
                 if not success and args.quiet and output:
                     # Show captured error output even in quiet mode
                     for line in output.strip().splitlines()[-10:]:

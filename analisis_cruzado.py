@@ -1,11 +1,12 @@
 import csv
 import sys
 import os
+from config import RUTA_RESULTADOS
 
 # CONFIGURACIÓN
-ARCHIVO_DENSIDAD = "reporte_densidad.csv"
-ARCHIVO_IMPACTO = "dep_03_matriz_impacto.csv"
-SALIDA_ESTRATEGIA = "reporte_estrategia_migracion.csv"
+ARCHIVO_DENSIDAD  = RUTA_RESULTADOS / "reporte_densidad.csv"
+ARCHIVO_IMPACTO   = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+SALIDA_ESTRATEGIA = RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"
 
 # Mapa de Prioridad (Menor número = Mayor urgencia)
 PRIORIDAD_MAP = {
@@ -39,7 +40,7 @@ def cargar_impacto():
     """Carga la matriz de impacto en un diccionario para búsqueda rápida."""
     impacto_map = {}
 
-    if not os.path.exists(ARCHIVO_IMPACTO):
+    if not ARCHIVO_IMPACTO.exists():
         print(f"ERROR: No se encuentra {ARCHIVO_IMPACTO}")
         sys.exit(1)
 
@@ -98,7 +99,7 @@ def main():
     mapa_impacto = cargar_impacto()
 
     # 2. Procesar Densidad y Cruzar
-    if not os.path.exists(ARCHIVO_DENSIDAD):
+    if not ARCHIVO_DENSIDAD.exists():
         print(f"ERROR: No se encuentra {ARCHIVO_DENSIDAD}")
         sys.exit(1)
 

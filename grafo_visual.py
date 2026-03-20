@@ -25,8 +25,10 @@ from pathlib import Path
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-GRAFO_CSV   = "dep_02_grafo_unidades.csv"
-CONSOLIDADO = "reporte_consolidado.csv"
+from config import RUTA_RESULTADOS
+
+GRAFO_CSV   = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
+CONSOLIDADO = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
 # Colores base
 COLOR_ENTRADA       = "#4472C4"   # azul  — entry point seleccionado
@@ -72,8 +74,7 @@ SHAPE_DEFAULT = "box"
 
 def cargar_consolidado() -> dict:
     """dict: nombre.upper() -> fila del consolidado."""
-    p = Path(CONSOLIDADO)
-    if not p.exists():
+    if not CONSOLIDADO.exists():
         return {}
     meta = {}
     with open(CONSOLIDADO, encoding="utf-8-sig") as f:
@@ -345,7 +346,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if not Path(GRAFO_CSV).exists():
+    if not GRAFO_CSV.exists():
         print(f"ERROR: No se encuentra {GRAFO_CSV}")
         sys.exit(1)
 
@@ -397,7 +398,7 @@ def main():
         safe_names = "_".join(
             re.sub(r"[^a-zA-Z0-9]", "", ep) for ep in entry_sel
         )
-        salida = f"grafo_{safe_names}.dot"
+        salida = RUTA_RESULTADOS / f"grafo_{safe_names}.dot"
 
         titulo = "CallGraph_" + safe_names
         dot = generar_dot(
@@ -409,12 +410,13 @@ def main():
             incluir_use=incluir_use,
             titulo=titulo,
         )
-        Path(salida).write_text(dot, encoding="utf-8")
+        RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+        salida.write_text(dot, encoding="utf-8")
         print(f"Generado: {salida}  ({len(nodos_perm)} nodos)")
         print(f"\nPara renderizar:")
-        stem = Path(salida).stem
-        print(f"  dot -Tpng {salida} -o {stem}.png")
-        print(f"  dot -Tsvg {salida} -o {stem}.svg")
+        stem = salida.stem
+        print(f"  dot -Tpng {salida} -o {RUTA_RESULTADOS / (stem + '.png')}")
+        print(f"  dot -Tsvg {salida} -o {RUTA_RESULTADOS / (stem + '.svg')}")
 
     # -------------------------------------------------------------------------
     # Modo completo: sin --entry
@@ -440,8 +442,9 @@ def main():
             incluir_use=True,
             titulo="CallGraph_Completo",
         )
-        Path("grafo_completo.dot").write_text(dot_full, encoding="utf-8")
-        print("Generado: grafo_completo.dot")
+        RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+        (RUTA_RESULTADOS / "grafo_completo.dot").write_text(dot_full, encoding="utf-8")
+        print(f"Generado: {RUTA_RESULTADOS / 'grafo_completo.dot'}")
 
         # Grafo simple: solo alcanzables, sin USE
         alcanzables = {
@@ -457,8 +460,8 @@ def main():
             incluir_use=False,
             titulo="CallGraph_Simple",
         )
-        Path("grafo_simple.dot").write_text(dot_simple, encoding="utf-8")
-        print("Generado: grafo_simple.dot")
+        (RUTA_RESULTADOS / "grafo_simple.dot").write_text(dot_simple, encoding="utf-8")
+        print(f"Generado: {RUTA_RESULTADOS / 'grafo_simple.dot'}")
 
         print()
         print("Para renderizar:")

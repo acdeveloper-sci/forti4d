@@ -3,18 +3,19 @@ import os
 import csv
 from collections import Counter, defaultdict
 from statistics import mean, median
+from config import RUTA_RESULTADOS
 
 # Archivos de entrada
-INVENTARIO = "reporte_inventario.csv"
-DEPENDENCIAS = "dep_03_matriz_impacto.csv"  # Usamos la matriz ya calculada para agilizar
+INVENTARIO   = RUTA_RESULTADOS / "reporte_inventario.csv"
+DEPENDENCIAS = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
 
 # Salidas
-OUT_MD = "RESUMEN_PROYECTO.md"
-OUT_CSV = "estadisticas_por_archivo.csv"
+OUT_MD  = RUTA_RESULTADOS / "RESUMEN_PROYECTO.md"
+OUT_CSV = RUTA_RESULTADOS / "estadisticas_por_archivo.csv"
 
 
 def cargar_datos():
-    if not os.path.exists(INVENTARIO):
+    if not INVENTARIO.exists():
         print(f"ERROR: No se encuentra {INVENTARIO}")
         sys.exit(1)
 
@@ -35,7 +36,7 @@ def cargar_datos():
             inv_rows.append(row)
 
     dep_rows = []
-    if os.path.exists(DEPENDENCIAS):
+    if DEPENDENCIAS.exists():
         # CAMBIO 2: utf-8-sig para leer dependencias
         with open(DEPENDENCIAS, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)

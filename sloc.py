@@ -3,12 +3,13 @@ from collections import defaultdict
 from pathlib import Path
 
 import reader_logical
-from inventario import cargar_inventario, CARPETA_CODIGO
+from inventario import cargar_inventario
+from config import CARPETA_CODIGO, RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-SALIDA_CSV = "reporte_sloc.csv"
+SALIDA_CSV = RUTA_RESULTADOS / "reporte_sloc.csv"
 
 
 # =============================================================================
@@ -81,7 +82,7 @@ def analizar_sloc():
             u["Linea_Fin"]    = 0
         mapa_unidades[archivo].append(u)
 
-    ruta_codigo       = Path(CARPETA_CODIGO)
+    ruta_codigo       = CARPETA_CODIGO
     archivos_ordenados = sorted(mapa_unidades.keys(), key=str.lower)
     datos_salida       = []
 

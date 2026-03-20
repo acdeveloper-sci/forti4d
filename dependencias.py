@@ -23,18 +23,17 @@ except ImportError as e:
 # =============================================================================
 # CONFIGURACIÓN Y CONSTANTES
 # =============================================================================
-from inventario import CARPETA_CODIGO
+from config import CARPETA_CODIGO, RUTA_RESULTADOS
 
-# CARPETA_CODIGO = "../athys/mercedes/"
-ARCHIVO_INVENTARIO = "reporte_inventario.csv"
+ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "reporte_inventario.csv"
 
 # Archivos de Salida
-OUT_AMBIGUOS = "dep_00_ambiguedades.csv"
-OUT_MAESTRO = "dep_01_datos_maestros.csv"
-OUT_GRAFO = "dep_02_grafo_unidades.csv"
-OUT_IMPACTO = "dep_03_matriz_impacto.csv"
-OUT_HUERFANOS = "dep_04_externos_huerfanos.csv"
-OUT_ARCHIVOS = "dep_05_dependencia_archivos.csv"
+OUT_AMBIGUOS  = RUTA_RESULTADOS / "dep_00_ambiguedades.csv"
+OUT_MAESTRO   = RUTA_RESULTADOS / "dep_01_datos_maestros.csv"
+OUT_GRAFO     = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
+OUT_IMPACTO   = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+OUT_HUERFANOS = RUTA_RESULTADOS / "dep_04_externos_huerfanos.csv"
+OUT_ARCHIVOS  = RUTA_RESULTADOS / "dep_05_dependencia_archivos.csv"
 
 # Jerarquía de Naturaleza (Menor índice = Más fuerte)
 RANKING_NATURALEZA = {
@@ -521,9 +520,11 @@ def scan_file(ruta_archivo: Path) -> List[Dict]:
 
 
 def main():
+    RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+
     # 1. Cargar datos base
     inventory, _ = cargar_inventario(report_ambiguos=True)
-    path_fuente = Path(CARPETA_CODIGO)
+    path_fuente = CARPETA_CODIGO
 
     # 2. Escanear Archivos
     archivos = sorted([f for f in path_fuente.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
@@ -569,7 +570,7 @@ def main():
             dest_file = target
             dest_type = "FILE"
             # Verificar existencia
-            if not os.path.exists(os.path.join(CARPETA_CODIGO, target)):
+            if not (CARPETA_CODIGO / target).exists():
                 dest_file = "MISSING_FILE"
 
         else:
