@@ -34,13 +34,15 @@ later scripts consume.
 ```
 inventario.py          →  reporte_inventario.csv
 dependencias.py        →  dep_00_ambiguedades.csv
-                          dep_01_llamadas.csv
+                          dep_01_datos_maestros.csv
                           dep_02_grafo_unidades.csv
                           dep_03_matriz_impacto.csv
+                          dep_04_externos_huerfanos.csv
+                          dep_05_dependencia_archivos.csv
 perfilador.py          →  reporte_densidad.csv
                           audit/<file>_DEBUG.csv  (one per source file)
 analisis_estructura.py →  reporte_estructura.csv
-analisis_bloques_v8.py →  reporte_bloques.csv
+analisis_bloques_v8.py →  bloques/<file>_bloques.txt  (one per source file)
 analisis_cruzado.py    →  reporte_cruzado.csv
 resumen_ejecutivo.py   →  RESUMEN_PROYECTO.md
                           estadisticas_por_archivo.csv
@@ -113,13 +115,15 @@ dot -Tsvg grafo_completo.dot -o grafo_completo.svg
 | :--- | :--- | :--- |
 | `reporte_inventario.csv` | `inventario.py` | All program units with type, line range, and audit flags |
 | `dep_00_ambiguedades.csv` | `dependencias.py` | Units defined in more than one source file |
-| `dep_01_llamadas.csv` | `dependencias.py` | Raw call/use relationships |
+| `dep_01_datos_maestros.csv` | `dependencias.py` | Raw call/use relationships |
 | `dep_02_grafo_unidades.csv` | `dependencias.py` | Resolved call graph (CALL, USE, FUNC_CALL edges) |
 | `dep_03_matriz_impacto.csv` | `dependencias.py` | Fan-In and Fan-Out per unit |
+| `dep_04_externos_huerfanos.csv` | `dependencias.py` | External references with no known definition in the corpus |
+| `dep_05_dependencia_archivos.csv` | `dependencias.py` | File-level dependency summary |
 | `reporte_densidad.csv` | `perfilador.py` | Statement density profile per unit (% calculation, control, I/O, legacy) |
 | `audit/<file>_DEBUG.csv` | `perfilador.py` | Per-line statement classification for each source file |
-| `reporte_estructura.csv` | `analisis_estructura.py` | Structural categories (islands, hubs, entry points, etc.) |
-| `reporte_bloques.csv` | `analisis_bloques_v8.py` | Block nesting depth and construct counts per unit |
+| `analisis_nodos_criticos.csv` | `analisis_estructura.py` | Structural categories (islands, hubs, entry points, etc.) |
+| `bloques/<file>_bloques.txt` | `analisis_bloques_v8.py` | Block topology per source file (one text file per source file, written to `bloques/`) |
 | `reporte_cruzado.csv` | `analisis_cruzado.py` | Cross-analysis combining density and structural metrics |
 | `RESUMEN_PROYECTO.md` | `resumen_ejecutivo.py` | Executive summary in Markdown |
 | `estadisticas_por_archivo.csv` | `resumen_ejecutivo.py` | Per-file summary statistics |
