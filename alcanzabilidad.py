@@ -3,12 +3,13 @@ import sys
 from collections import defaultdict, deque
 
 from inventario import cargar_inventario
+from config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-GRAFO_CSV  = "dep_02_grafo_unidades.csv"
-SALIDA_CSV = "reporte_alcanzabilidad.csv"
+GRAFO_CSV  = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
+SALIDA_CSV = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
 
 
 # =============================================================================

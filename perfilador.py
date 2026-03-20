@@ -15,11 +15,10 @@ from inventario import cargar_inventario
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-from inventario import CARPETA_CODIGO
+from config import CARPETA_CODIGO, RUTA_RESULTADOS
 
-# CARPETA_CODIGO = Path("codigo_fuente")
-SALIDA_CSV = "reporte_densidad.csv"
-RUTA_AUDIT = "audit/"
+SALIDA_CSV = RUTA_RESULTADOS / "reporte_densidad.csv"
+RUTA_AUDIT = RUTA_RESULTADOS / "audit"
 
 # =============================================================================
 # GRUPOS DE DENSIDAD
@@ -121,7 +120,7 @@ def clasificar_linea(linea_logica: str):
 def analizar_densidad():
     print("INICIO PERFILADO DE DENSIDAD (V3 Auditada)")
 
-    ruta_archivos = Path(CARPETA_CODIGO)
+    ruta_archivos = CARPETA_CODIGO
     if not ruta_archivos.exists():
         print(f"ERROR: No existe la carpeta {CARPETA_CODIGO}")
         return
@@ -152,8 +151,8 @@ def analizar_densidad():
 
     datos_salida = []
 
-    ruta_audit = Path(RUTA_AUDIT)
-    ruta_audit.mkdir(exist_ok=True)
+    ruta_audit = RUTA_AUDIT
+    ruta_audit.mkdir(parents=True, exist_ok=True)
 
     # Ordenamos los archivos alfabéticamente para el reporte
     # archivos_ordenados = mapa_unidades_archivo.keys()

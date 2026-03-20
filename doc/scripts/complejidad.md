@@ -9,25 +9,23 @@ decision points from the `audit/*_DEBUG.csv` files produced by `perfilador.py`.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `RUTA_AUDIT` | `"audit/"` | Directory containing `*_DEBUG.csv` files |
-| `SALIDA_CSV` | `"reporte_complejidad.csv"` | Output file |
-
-> **Note:** `audit/` is currently read relative to `src/`. The directory
-> lives at `results/audit/` after manual reorganization. Migration of
-> input/output paths to `results/` is planned.
+| `RUTA_AUDIT` | `RUTA_RESULTADOS / "audit"` | Directory containing `*_DEBUG.csv` files |
+| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_complejidad.csv"` | Output file |
 
 ---
 
 ## Inputs
 
-- `audit/<filename>_DEBUG.csv` for each source file
-- `reporte_inventario.csv` (via `cargar_inventario()`)
+- `<FORT_OUT>/audit/<filename>_DEBUG.csv` for each source file
+- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
 
 ---
 
-## Output: `reporte_complejidad.csv`
+## Output: `<FORT_OUT>/reporte_complejidad.csv`
 
 One row per program unit, sorted by CC descending.
 
@@ -77,5 +75,5 @@ CC = 1 + (number of decision points in the unit)
 
 - Scope resolution assigns each decision point to the innermost unit whose
   `[Linea_Inicio, Linea_Fin]` range contains the statement's line number.
-- CC is computed from `audit/` DEBUG files, not directly from source. This
-  means `perfilador.py` must be run first.
+- CC is computed from `<FORT_OUT>/audit/` DEBUG files, not directly from source.
+  `perfilador.py` must be run first.

@@ -10,17 +10,19 @@ entry points (executables).
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `GRAFO_CSV` | `"dep_02_grafo_unidades.csv"` | Input: call graph edges |
-| `CONSOLIDADO` | `"reporte_consolidado.csv"` | Input: node metadata |
+| `GRAFO_CSV` | `RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"` | Input: call graph edges |
+| `CONSOLIDADO` | `RUTA_RESULTADOS / "reporte_consolidado.csv"` | Input: node metadata |
 
 ---
 
 ## Inputs
 
-- `dep_02_grafo_unidades.csv`
-- `reporte_consolidado.csv`
+- `<FORT_OUT>/dep_02_grafo_unidades.csv`
+- `<FORT_OUT>/reporte_consolidado.csv`
 
 ---
 
@@ -50,18 +52,18 @@ python grafo_visual.py --entry mcdes --use
 
 | File | Generated when |
 | :--- | :--- |
-| `grafo_completo.dot` | No `--entry` flag (all nodes, all edges including USE) |
-| `grafo_simple.dot` | No `--entry` flag (reachable nodes only, CALL + FUNC_CALL only) |
-| `grafo_<names>.dot` | `--entry` specified — one file named after the selected entry points |
+| `<FORT_OUT>/grafo_completo.dot` | No `--entry` flag (all nodes, all edges including USE) |
+| `<FORT_OUT>/grafo_simple.dot` | No `--entry` flag (reachable nodes only, CALL + FUNC_CALL only) |
+| `<FORT_OUT>/grafo_<names>.dot` | `--entry` specified — one file named after the selected entry points |
 
 ---
 
 ## Rendering (requires Graphviz)
 
 ```bash
-dot -Tpng grafo_mcdes.dot    -o grafo_mcdes.png
-dot -Tsvg grafo_completo.dot -o grafo_completo.svg
-dot -Tpdf grafo_simple.dot   -o grafo_simple.pdf
+dot -Tpng results/grafo_mcdes.dot    -o results/grafo_mcdes.png
+dot -Tsvg results/grafo_completo.dot -o results/grafo_completo.svg
+dot -Tpdf results/grafo_simple.dot   -o results/grafo_simple.pdf
 ```
 
 ---

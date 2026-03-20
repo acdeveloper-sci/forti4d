@@ -5,13 +5,14 @@ from collections import defaultdict
 from pathlib import Path
 
 from inventario import cargar_inventario
+from config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-RUTA_AUDIT         = "audit/"
-SALIDA_USO         = "common_uso.csv"
-SALIDA_ACOPLAMIENTO = "common_acoplamiento.csv"
+RUTA_AUDIT          = RUTA_RESULTADOS / "audit"
+SALIDA_USO          = RUTA_RESULTADOS / "common_uso.csv"
+SALIDA_ACOPLAMIENTO = RUTA_RESULTADOS / "common_acoplamiento.csv"
 
 NOMBRE_BLANK = "(BLANK)"   # Etiqueta para COMMON sin nombre
 
@@ -108,7 +109,7 @@ def analizar_common():
         k = (u["Archivo"], u["Nombre"])
         meta[k] = {"Tipo": u.get("Tipo", "UNKNOWN")}
 
-    ruta_audit = Path(RUTA_AUDIT)
+    ruta_audit = RUTA_AUDIT
     archivos_ordenados = sorted(mapa_unidades.keys(), key=str.lower)
 
     common_total = 0

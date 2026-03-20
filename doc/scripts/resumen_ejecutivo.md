@@ -10,25 +10,27 @@ critical and most orchestrating units.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `INVENTARIO` | `"reporte_inventario.csv"` | Input: unit inventory |
-| `DEPENDENCIAS` | `"dep_03_matriz_impacto.csv"` | Input: Fan-In / Fan-Out |
-| `OUT_MD` | `"RESUMEN_PROYECTO.md"` | Output: Markdown summary |
-| `OUT_CSV` | `"estadisticas_por_archivo.csv"` | Output: per-file statistics |
+| `INVENTARIO` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Input: unit inventory |
+| `DEPENDENCIAS` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Input: Fan-In / Fan-Out |
+| `OUT_MD` | `RUTA_RESULTADOS / "RESUMEN_PROYECTO.md"` | Output: Markdown summary |
+| `OUT_CSV` | `RUTA_RESULTADOS / "estadisticas_por_archivo.csv"` | Output: per-file statistics |
 
 ---
 
 ## Inputs
 
-- `reporte_inventario.csv`
-- `dep_03_matriz_impacto.csv`
+- `<FORT_OUT>/reporte_inventario.csv`
+- `<FORT_OUT>/dep_03_matriz_impacto.csv`
 
 ---
 
 ## Outputs
 
-### `RESUMEN_PROYECTO.md`
+### `<FORT_OUT>/RESUMEN_PROYECTO.md`
 
 Markdown document with the following sections:
 
@@ -40,7 +42,7 @@ Markdown document with the following sections:
 5. **Critical Units (highest Fan-In)** — top 15 most reused units
 6. **Orchestrating Units (highest Fan-Out)** — top 15 units with most dependencies
 
-### `estadisticas_por_archivo.csv`
+### `<FORT_OUT>/estadisticas_por_archivo.csv`
 
 One row per source file.
 

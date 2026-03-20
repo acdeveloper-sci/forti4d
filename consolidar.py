@@ -16,19 +16,20 @@ import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
+from config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-INVENTARIO   = "reporte_inventario.csv"
-SLOC         = "reporte_sloc.csv"
-COMPLEJIDAD  = "reporte_complejidad.csv"
-IMPACTO      = "dep_03_matriz_impacto.csv"
-DENSIDAD     = "reporte_densidad.csv"
-ALCANZ       = "reporte_alcanzabilidad.csv"
-COMMON_USO   = "common_uso.csv"
+INVENTARIO  = RUTA_RESULTADOS / "reporte_inventario.csv"
+SLOC        = RUTA_RESULTADOS / "reporte_sloc.csv"
+COMPLEJIDAD = RUTA_RESULTADOS / "reporte_complejidad.csv"
+IMPACTO     = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"
+ALCANZ      = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
+COMMON_USO  = RUTA_RESULTADOS / "common_uso.csv"
 
-SALIDA_CSV   = "reporte_consolidado.csv"
+SALIDA_CSV  = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
 
 # =============================================================================
@@ -99,7 +100,9 @@ def cargar_fuentes():
 
     # Inventario: clave = (Archivo, Nombre)  ← el inventario usa "Nombre"
     inv_raw = {}
-    if not Path(INVENTARIO).exists():
+    RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+
+    if not INVENTARIO.exists():
         print(f"ERROR: {INVENTARIO} no encontrado.")
         sys.exit(1)
     with open(INVENTARIO, encoding="utf-8-sig") as f:
@@ -116,7 +119,7 @@ def cargar_fuentes():
 
     # dep_03: clave = (Archivo, Unidad) — columnas en orden distinto
     imp_data = {}
-    if Path(IMPACTO).exists():
+    if IMPACTO.exists():
         with open(IMPACTO, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 a = row.get("Archivo", "").strip()

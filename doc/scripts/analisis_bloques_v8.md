@@ -16,14 +16,14 @@ script.
 
 ```bash
 # Analyze one file
-python analisis_bloques_v8.py audit/geolec.f90_DEBUG.csv
+python analisis_bloques_v8.py results/audit/geolec.f90_DEBUG.csv
 
-# Save output to bloques/
-python analisis_bloques_v8.py audit/geolec.f90_DEBUG.csv > bloques/geolec.f90_bloques.txt
+# Save output to results/bloques/
+python analisis_bloques_v8.py results/audit/geolec.f90_DEBUG.csv > results/bloques/geolec.f90_bloques.txt
 
 # Process all files in batch (bash)
-for f in audit/*_DEBUG.csv; do
-    python analisis_bloques_v8.py "$f" > bloques/$(basename "$f" _DEBUG.csv)_bloques.txt
+for f in results/audit/*_DEBUG.csv; do
+    python analisis_bloques_v8.py "$f" > results/bloques/$(basename "$f" _DEBUG.csv)_bloques.txt
 done
 ```
 
@@ -31,8 +31,8 @@ done
 
 ## Inputs
 
-- A single `audit/<filename>_DEBUG.csv` (passed as `sys.argv[1]`)
-- `reporte_inventario.csv` (loaded via `cargar_inventario()` to get unit line ranges)
+- A single `<FORT_OUT>/audit/<filename>_DEBUG.csv` (passed as `sys.argv[1]`)
+- `<FORT_OUT>/reporte_inventario.csv` (loaded via `cargar_inventario()` to get unit line ranges)
 
 ---
 
@@ -71,6 +71,6 @@ Columns: `start_line - end_line | depth | tree_indent type | top_3_kinds`
 
 ## Notes
 
-- Requires `perfilador.py` to have been run first (reads from `audit/`).
-- Output files are stored in `results/bloques/` after manual redirection.
-  Migration of this path to `results/` is planned.
+- Requires `perfilador.py` to have been run first (reads from `<FORT_OUT>/audit/`).
+- When invoked via `pipeline.py`, output is written automatically to `<FORT_OUT>/bloques/`.
+  When invoked manually, redirect stdout as shown in the Usage examples above.

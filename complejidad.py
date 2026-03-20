@@ -4,12 +4,13 @@ from collections import defaultdict
 from pathlib import Path
 
 from inventario import cargar_inventario
+from config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-RUTA_AUDIT = "audit/"
-SALIDA_CSV = "reporte_complejidad.csv"
+RUTA_AUDIT = RUTA_RESULTADOS / "audit"
+SALIDA_CSV = RUTA_RESULTADOS / "reporte_complejidad.csv"
 
 
 # =============================================================================
@@ -105,7 +106,7 @@ def analizar_complejidad():
         mapa_unidades_archivo[archivo].append(u)
 
     datos_salida = []
-    ruta_audit   = Path(RUTA_AUDIT)
+    ruta_audit   = RUTA_AUDIT
 
     archivos_ordenados = sorted(mapa_unidades_archivo.keys(), key=str.lower)
 

@@ -2,20 +2,21 @@ import sys
 import os
 import csv
 from collections import defaultdict
+from config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-ARCHIVO_IMPACTO = "dep_03_matriz_impacto.csv"
-ARCHIVO_INVENTARIO = "reporte_inventario.csv"
-ARCHIVO_SALIDA = "analisis_nodos_criticos.csv"
+ARCHIVO_IMPACTO    = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "reporte_inventario.csv"
+ARCHIVO_SALIDA     = RUTA_RESULTADOS / "analisis_nodos_criticos.csv"
 
 # ¿Cuántas llamadas entrantes convierten a una unidad en "CRÍTICA"?
 UMBRAL_CRITICO = 10
 
 
 def cargar_matriz():
-    if not os.path.exists(ARCHIVO_IMPACTO):
+    if not ARCHIVO_IMPACTO.exists():
         print(f"ERROR: No existe '{ARCHIVO_IMPACTO}'. Ejecuta dependencias.py primero.")
         sys.exit(1)
 
@@ -57,7 +58,7 @@ def cargar_archivos_inventario():
     archivos_conocidos = set()
     archivos_con_implicit_main = set()
 
-    if not os.path.exists(ARCHIVO_INVENTARIO):
+    if not ARCHIVO_INVENTARIO.exists():
         print(f"Advertencia: No existe '{ARCHIVO_INVENTARIO}'. Los ISLAs no se detectarán.")
         return archivos_conocidos, archivos_con_implicit_main
 

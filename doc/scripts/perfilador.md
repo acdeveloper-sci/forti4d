@@ -11,28 +11,26 @@ the primary intermediate artifact consumed by `complejidad.py`,
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `CARPETA_CODIGO` | from `inventario.py` | Path to the Fortran source directory |
-| `SALIDA_CSV` | `"reporte_densidad.csv"` | Density profile output |
-| `RUTA_AUDIT` | `"audit/"` | Directory for per-file DEBUG files |
-
-> **Note:** `audit/` is currently written relative to `src/`. In `results/`,
-> the directory is at `results/audit/`. Migration of output paths to `results/`
-> is planned.
+| `CARPETA_CODIGO` | `FORT_SRC` env var → `../athys/mercedes/` | Path to the Fortran source directory |
+| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_densidad.csv"` | Density profile output |
+| `RUTA_AUDIT` | `RUTA_RESULTADOS / "audit"` | Directory for per-file DEBUG files |
 
 ---
 
 ## Inputs
 
-- `reporte_inventario.csv`
+- `<FORT_OUT>/reporte_inventario.csv`
 - Fortran source files in `CARPETA_CODIGO`
 
 ---
 
 ## Outputs
 
-### `reporte_densidad.csv`
+### `<FORT_OUT>/reporte_densidad.csv`
 One row per program unit.
 
 | Column | Description |
@@ -56,7 +54,7 @@ One row per program unit.
 | `N_Print` | Count of PRINT statements |
 | `N_Write` | Count of WRITE statements |
 
-### `audit/<filename>_DEBUG.csv`
+### `<FORT_OUT>/audit/<filename>_DEBUG.csv`
 One file per source file. One row per logical line.
 
 | Column | Description |
@@ -85,4 +83,4 @@ One file per source file. One row per logical line.
   each logical line after masking string literals to avoid false positives.
 - Scope resolution assigns each statement to the innermost unit whose line
   range contains the statement's start line.
-- The `audit/` directory is created automatically if it does not exist.
+- The `<FORT_OUT>/audit/` directory is created automatically if it does not exist.

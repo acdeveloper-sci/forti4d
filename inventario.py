@@ -23,8 +23,9 @@ except ImportError as e:
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-CARPETA_CODIGO = "../athys/mercedes/"
-ARCHIVO_SALIDA = "reporte_inventario.csv"
+from config import CARPETA_CODIGO, RUTA_RESULTADOS
+
+ARCHIVO_SALIDA = RUTA_RESULTADOS / "reporte_inventario.csv"
 
 # --- LISTAS DE AUDITORÍA (Reporte) ---
 LISTA_LEGACY = ["COMMON", "EQUIVALENCE", "PAUSE", "ENTRY", "ASSIGN", "GO TO", "COMPUTED GOTO", "ARITHMETIC IF"]
@@ -121,7 +122,7 @@ def mask_strings(text: str) -> str:
 # Agregar esto en src/inventario.py
 
 
-def cargar_inventario(ruta_csv="reporte_inventario.csv"):
+def cargar_inventario(ruta_csv=None):
     """
     Lee el reporte CSV generado por este mismo script y devuelve la estructura
     completa de datos (SSOT) necesaria para otros análisis.
@@ -131,16 +132,20 @@ def cargar_inventario(ruta_csv="reporte_inventario.csv"):
                     ('Archivo', 'Tipo', 'Nombre', 'Linea_Inicio', etc.)
     """
     import csv
-    import os
+    from pathlib import Path
 
+    if ruta_csv is None:
+        ruta_csv = RUTA_RESULTADOS / "reporte_inventario.csv"
+
+    ruta_csv = Path(ruta_csv)
     datos_recuperados = []
 
-    if not os.path.exists(ruta_csv):
+    if not ruta_csv.exists():
         print(f"Advertencia: No se encontró el archivo de inventario: {ruta_csv}")
         return []
 
     try:
-        with open(ruta_csv, mode="r", encoding="utf-8") as f:
+        with ruta_csv.open(mode="r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Conversión de tipos crítica para el perfilador
@@ -372,7 +377,7 @@ def auditar_archivo(ruta_archivo: Path) -> List[Dict]:
 
 
 def main():
-    path_fuente = Path(CARPETA_CODIGO)
+    path_fuente = CARPETA_CODIGO
     if not path_fuente.exists():
         print(f"Error: No existe '{CARPETA_CODIGO}'")
         return
@@ -397,6 +402,7 @@ def main():
             "IO",
             "Custom",
         ]
+        ARCHIVO_SALIDA.parent.mkdir(parents=True, exist_ok=True)
         with open(ARCHIVO_SALIDA, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=campos)
             writer.writeheader()

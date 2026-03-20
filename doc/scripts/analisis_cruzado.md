@@ -10,22 +10,24 @@ applies a rule engine to recommend an action for each unit.
 
 ## Configuration
 
+All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `ARCHIVO_DENSIDAD` | `"reporte_densidad.csv"` | Input: statement density profiles |
-| `ARCHIVO_IMPACTO` | `"dep_03_matriz_impacto.csv"` | Input: Fan-In / Fan-Out |
-| `SALIDA_ESTRATEGIA` | `"reporte_estrategia_migracion.csv"` | Output |
+| `ARCHIVO_DENSIDAD` | `RUTA_RESULTADOS / "reporte_densidad.csv"` | Input: statement density profiles |
+| `ARCHIVO_IMPACTO` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Input: Fan-In / Fan-Out |
+| `SALIDA_ESTRATEGIA` | `RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"` | Output |
 
 ---
 
 ## Inputs
 
-- `reporte_densidad.csv`
-- `dep_03_matriz_impacto.csv`
+- `<FORT_OUT>/reporte_densidad.csv`
+- `<FORT_OUT>/dep_03_matriz_impacto.csv`
 
 ---
 
-## Output: `reporte_estrategia_migracion.csv`
+## Output: `<FORT_OUT>/reporte_estrategia_migracion.csv`
 
 One row per unit, sorted by `Prioridad_Num` ascending (most urgent first),
 then by `IVC` descending within the same priority.
