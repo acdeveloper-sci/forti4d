@@ -38,6 +38,7 @@ STEPS = [
     ("common_blocks",       "common_blocks.py",        "Detect COMMON block coupling"),
     ("alcanzabilidad",      "alcanzabilidad.py",       "Dead code detection from entry points"),
     ("sloc",                "sloc.py",                 "Precise SLOC count per unit"),
+    ("clones",              "clones.py",               "Detect identical/similar/diverged duplicate units"),
     ("consolidar",          "consolidar.py",           "Join all reports into reporte_consolidado.csv"),
     ("grafo_visual",        "grafo_visual.py",         "Generate call graph DOT files"),
 ]
