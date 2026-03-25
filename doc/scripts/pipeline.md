@@ -72,6 +72,7 @@ python3 pipeline.py --project ../myproject --output out/ --from complejidad --qu
 | `resumen_ejecutivo` | `resumen_ejecutivo.py` | Generate executive summary |
 | `complejidad` | `complejidad.py` | Compute McCabe cyclomatic complexity |
 | `common_blocks` | `common_blocks.py` | Detect COMMON block coupling |
+| `simbolos` | `simbolos.py` | Extract variable/parameter/implicit symbols per unit |
 | `alcanzabilidad` | `alcanzabilidad.py` | Dead code detection from entry points |
 | `sloc` | `sloc.py` | Precise SLOC count per unit |
 | `clones` | `clones.py` | Detect identical/similar/diverged duplicate units |
@@ -111,7 +112,7 @@ Terminal output includes per-step timing and a final summary table:
 === Fortran Static Analysis Pipeline ===
 Project : ../athys/mercedes/
 Output  : results/
-Steps   : 15
+Steps   : 16
 
 ────────────────────────────────────────────────────────────
 [1/13] inventario  —  Build unit inventory from source files
@@ -126,5 +127,5 @@ Summary  —  45.1s total
   ✓  dependencias            8.7s
   ...
 
-All 15 steps completed successfully.
+All 16 steps completed successfully.
 ```
