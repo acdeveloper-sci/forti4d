@@ -36,6 +36,7 @@ STEPS = [
     ("resumen_ejecutivo",   "resumen_ejecutivo.py",    "Generate executive summary"),
     ("complejidad",         "complejidad.py",          "Compute McCabe cyclomatic complexity"),
     ("common_blocks",       "common_blocks.py",        "Detect COMMON block coupling"),
+    ("simbolos",            "simbolos.py",             "Extract variable/parameter/implicit symbols per unit"),
     ("alcanzabilidad",      "alcanzabilidad.py",       "Dead code detection from entry points"),
     ("sloc",                "sloc.py",                 "Precise SLOC count per unit"),
     ("clones",              "clones.py",               "Detect identical/similar/diverged duplicate units"),
