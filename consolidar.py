@@ -28,6 +28,10 @@ IMPACTO     = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
 DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"
 ALCANZ      = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
 COMMON_USO  = RUTA_RESULTADOS / "common_uso.csv"
+SIMB_VARS   = RUTA_RESULTADOS / "simbolos_variables.csv"
+SIMB_FIRMAS = RUTA_RESULTADOS / "simbolos_firmas.csv"
+SIMB_IMPL   = RUTA_RESULTADOS / "simbolos_implicit.csv"
+TIPOS_DEF   = RUTA_RESULTADOS / "tipos_definicion.csv"
 
 SALIDA_CSV  = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
@@ -130,6 +134,18 @@ def cargar_fuentes():
     # common_uso: varias filas por unidad (una por bloque)
     common_multi = leer_csv_multi(COMMON_USO, clave_au)
 
+    # símbolos E4: varias filas por unidad
+    vars_multi   = leer_csv_multi(SIMB_VARS,   clave_au)
+    firmas_multi = leer_csv_multi(SIMB_FIRMAS, clave_au)
+    impl_multi   = leer_csv_multi(SIMB_IMPL,   clave_au)
+
+    # tipos derivados: clave = (Archivo, Unidad_host)
+    def clave_tipo(row):
+        a = row.get("Archivo", "").strip()
+        u = row.get("Unidad",  "").strip()
+        return (a, u) if a and u else None
+    tipos_multi = leer_csv_multi(TIPOS_DEF, clave_tipo)
+
     print(f"  inventario   : {len(inv_raw)} unidades")
     print(f"  sloc         : {len(sloc_data)} entradas")
     print(f"  complejidad  : {len(cc_data)} entradas")
@@ -137,15 +153,20 @@ def cargar_fuentes():
     print(f"  alcanzabilidad: {len(alcanz_data)} entradas")
     print(f"  impacto      : {len(imp_data)} entradas")
     print(f"  common_uso   : {len(common_multi)} unidades con COMMON")
+    print(f"  simbolos_vars: {sum(len(v) for v in vars_multi.values())} vars en {len(vars_multi)} unidades")
+    print(f"  simbolos_firmas: {sum(len(v) for v in firmas_multi.values())} args en {len(firmas_multi)} unidades")
+    print(f"  tipos_def    : {sum(len(v) for v in tipos_multi.values())} tipos en {len(tipos_multi)} unidades")
 
-    return inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data, common_multi
+    return (inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
+            common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi)
 
 
 # =============================================================================
 # CONSTRUCCIÓN DEL CONSOLIDADO
 # =============================================================================
 
-def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data, common_multi):
+def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
+                    common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi):
     filas = []
 
     for (archivo, nombre), inv in inv_raw.items():
@@ -193,6 +214,16 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
         n_common_bloq= len(common_rows)
         common_bloq  = "; ".join(sorted(r.get("Bloque", "") for r in common_rows))
 
+        # ---- SÍMBOLOS E4 ----
+        var_rows   = vars_multi.get(k, [])
+        n_vars_loc = sum(1 for r in var_rows if r.get("Es_Parametro") == "NO")
+        n_params   = sum(1 for r in var_rows if r.get("Es_Parametro") == "SI")
+        n_args     = len(firmas_multi.get(k, []))
+        impl_rows  = impl_multi.get(k, [])
+        impl_none  = "SI" if any(r.get("Es_None") == "SI" for r in impl_rows) else (
+                     "NO" if impl_rows else "")
+        n_tipos    = len(tipos_multi.get(k, []))
+
         # ---- FLAGS del inventario ----
         legacy_flags = inv.get("Legacy", "").strip()
         io_flags     = inv.get("IO",     "").strip()
@@ -228,6 +259,12 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
             # Alcanzabilidad
             "Estado":         estado,
             "Via_Entradas":   via_entradas,
+            # Símbolos E4
+            "N_Vars_Locales":    n_vars_loc,
+            "N_Params":          n_params,
+            "N_Args_Formales":   n_args,
+            "Implicit_None":     impl_none,
+            "N_Tipos_Derivados": n_tipos,
             # Flags de auditoría
             "Legacy_Flags":   legacy_flags,
             "IO_Flags":       io_flags,
@@ -248,6 +285,7 @@ COLUMNAS = [
     "Pct_Calculo", "Pct_Control", "Pct_IO", "Pct_Legacy",
     "N_Common_Bloques", "Common_Bloques",
     "Estado", "Via_Entradas",
+    "N_Vars_Locales", "N_Params", "N_Args_Formales", "Implicit_None", "N_Tipos_Derivados",
     "Legacy_Flags", "IO_Flags",
 ]
 
