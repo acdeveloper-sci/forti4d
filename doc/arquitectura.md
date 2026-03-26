@@ -88,10 +88,13 @@ complejidad.py      ─┐
 common_blocks.py    ─┤─ all read audit/*_DEBUG.csv + reporte_inventario.csv
 alcanzabilidad.py   ─┘─ reads dep_02_grafo_unidades.csv + reporte_inventario.csv
 sloc.py             ─── reads source files + reporte_inventario.csv
+clones.py           ─── reads source files + reporte_inventario.csv
         │
         └──► consolidar.py  ─── joins all reports → reporte_consolidado.csv
                     │
-                    └──► grafo_visual.py  ─── reads dep_02 + reporte_consolidado.csv
+                    ├──► grafo_visual.py   ─── reads dep_02 + reporte_consolidado.csv
+                    │
+                    └──► priorizacion.py  ─── reads consolidado + clones + estrategia
 ```
 
 #### `complejidad.py`
@@ -115,15 +118,61 @@ sloc.py             ─── reads source files + reporte_inventario.csv
 - **Role:** Precise SLOC counting per unit. Uses `reader_logical.py` to classify each physical line as BLANK, COMMENT, CODE, or CONTINUATION. Computes LOC, SLOC_fisico (LOC minus blanks and comments), SLOC_neto (logical statements only), and comment density percentage.
 
 #### `consolidar.py`
-- **Reads:** `reporte_inventario.csv`, `reporte_sloc.csv`, `reporte_complejidad.csv`, `dep_03_matriz_impacto.csv`, `reporte_densidad.csv`, `reporte_alcanzabilidad.csv`, `common_uso.csv`
+- **Reads:** `reporte_inventario.csv`, `reporte_sloc.csv`, `reporte_complejidad.csv`, `dep_03_matriz_impacto.csv`, `reporte_densidad.csv`, `reporte_alcanzabilidad.csv`, `common_uso.csv`, `simbolos_variables.csv`, `simbolos_firmas.csv`, `simbolos_implicit.csv`, `tipos_definicion.csv`, `equivalencias.csv`
 - **Writes:** `reporte_consolidado.csv`
-- **Role:** Joins all per-unit reports into a single 25-column CSV (one row per unit). Adds the derived metric CC_SLOC (cyclomatic complexity per logical statement). Must run after all other analysis scripts.
+- **Role:** Joins all per-unit reports into a single 32-column CSV (one row per unit). Adds the derived metric CC_SLOC and E4 symbol summary columns (N_Vars_Locales, N_Params, N_Args_Formales, Implicit_None, N_Tipos_Derivados, Tiene_Equiv, N_Grupos_Equiv). Must run after all other analysis scripts.
+
+#### `clones.py`
+- **Reads:** `reporte_inventario.csv`, Fortran source files
+- **Writes:** `reporte_clones.csv`
+- **Role:** Detects identical, similar, and diverged duplicate units across files. Compares units with the same name appearing in multiple files using normalized token sequences. Classifies each pair as IDENTICO, SIMILAR, or DIVERGIDO.
 
 #### `grafo_visual.py`
 - **Reads:** `dep_02_grafo_unidades.csv`, `reporte_consolidado.csv`
 - **Writes:** `grafo_completo.dot`, `grafo_simple.dot`, and/or `grafo_<entry>.dot`
 - **Role:** Generates Graphviz DOT files for call graph visualization. Supports full corpus view or per-entry-point filtered subgraphs. Nodes are colored by reachability status and shaped by unit type. Clusters source files. Resolves `MAIN__` node names to inventory names.
 - **Flags:** `--list`, `--entry <name> [name…]`, `--use`
+
+#### `priorizacion.py`
+- **Reads:** `reporte_consolidado.csv`, `reporte_clones.csv`, `reporte_estrategia_migracion.csv`
+- **Writes:** `reporte_priorizacion.csv`
+- **Role:** Computes a composite risk/effort score (0–100) per unit across five signals: cyclomatic complexity (30%), Fan-In criticality (30%), legacy density (20%), clone state (15%), and E4 scope risk — no IMPLICIT NONE + EQUIVALENCE aliasing (5%). Ranks units into CRITICA / ALTA / MEDIA / BAJA / DEAD_CODE tiers for migration planning.
+
+---
+
+### Tier 4 — E4 ScopeManager
+
+These scripts extract the symbol-level microstructure of each unit (Eje Z of
+the MI4D model). They all read `audit/*_DEBUG.csv` produced by `perfilador.py`
+and the inventory for scope resolution.
+
+```
+audit/*_DEBUG.csv + reporte_inventario.csv
+        │
+        ├──► simbolos.py       → simbolos_variables.csv
+        │                         simbolos_firmas.csv
+        │                         simbolos_implicit.csv
+        │
+        ├──► tipos_derivados.py → tipos_definicion.csv
+        │                         tipos_componentes.csv
+        │
+        └──► equivalencias.py  → equivalencias.csv
+```
+
+#### `simbolos.py`
+- **Reads:** `audit/*_DEBUG.csv`, `reporte_inventario.csv`
+- **Writes:** `simbolos_variables.csv`, `simbolos_firmas.csv`, `simbolos_implicit.csv`
+- **Role:** Extracts variable declarations, PARAMETER constants, formal arguments of subroutines/functions, and IMPLICIT rules from each unit. Handles F77 and F90 syntax. Cross-references COMMON statements to populate the `En_Common` field post-processing.
+
+#### `tipos_derivados.py`
+- **Reads:** `audit/*_DEBUG.csv`, `reporte_inventario.csv`
+- **Writes:** `tipos_definicion.csv`, `tipos_componentes.csv`
+- **Role:** Extracts derived TYPE definitions and their component fields using a per-file state machine. Identifies the host unit for each TYPE via scope resolution.
+
+#### `equivalencias.py`
+- **Reads:** `audit/*_DEBUG.csv`, `reporte_inventario.csv`
+- **Writes:** `equivalencias.csv`
+- **Role:** Detects EQUIVALENCE aliasing groups using a union-find algorithm. Resolves transitive aliasing across multiple EQUIVALENCE statements within the same unit. One row per variable per aliasing group.
 
 ---
 
@@ -145,17 +194,23 @@ Fortran source files ───────────────────�
          ├──► perfilador.py → reporte_densidad.csv         │
          │              └──► audit/*_DEBUG.csv ────────────┼──► complejidad.py
          │                        │                        │    common_blocks.py
+         │                        │                        │    simbolos.py      ─┐
+         │                        │                        │    tipos_derivados.py─┤→ E4 CSVs
+         │                        │                        │    equivalencias.py ─┘
          │                        └──► analisis_bloques    │    (diagnostic, per file)
          │                                                 │
-         └──► sloc.py → reporte_sloc.csv                   │
+         ├──► sloc.py → reporte_sloc.csv                   │
+         │                                                 │
+         └──► clones.py → reporte_clones.csv               │
                                                            │
               [all reports above] ──────────────────────────┘
                         │
                         ▼
                  consolidar.py → reporte_consolidado.csv
                         │
-                        ▼
-                 grafo_visual.py → grafo_*.dot
+                        ├──► grafo_visual.py → grafo_*.dot
+                        │
+                        └──► priorizacion.py → reporte_priorizacion.csv
 ```
 
 ---
