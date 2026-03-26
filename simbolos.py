@@ -72,16 +72,58 @@ RE_ATTR_SIMPLES = re.compile(
     re.IGNORECASE,
 )
 
-# Tipos base reconocidos (para detectar declaraciones de tipo vs attr-only)
-_TIPOS_FORTRAN = {
-    "INTEGER", "REAL", "DOUBLE", "COMPLEX", "LOGICAL",
-    "CHARACTER", "BYTE", "TYPE", "CLASS",
-}
+# Atributos standalone F90 sin :: (fix issue-2 Fortran híbrido)
+# Ejemplo: DIMENSION X(100), POINTER :: P, ALLOCATABLE X
+RE_ATTR_STANDALONE = re.compile(
+    r"^\s*(dimension|allocatable|pointer|target|save|external|intrinsic|"
+    r"optional|volatile|protected)\s+(.*)",
+    re.IGNORECASE,
+)
 
 
 # =============================================================================
 # FUNCIONES DE PARSEO
 # =============================================================================
+
+def extraer_kind_tipo(tipo_str: str) -> str:
+    """
+    Extrae el KIND o LEN del tipo manejando paréntesis anidados.
+    Ejemplos:
+      'REAL(8)'                          → '8'
+      'INTEGER(KIND=4)'                  → '4'
+      'REAL(KIND=selected_real_kind(15,307))' → 'selected_real_kind(15,307)'
+      'CHARACTER(LEN=*)'                 → '*'
+      'REAL*8'                           → '*8'
+    """
+    # Primero intentar notación con asterisco: REAL*8
+    m_star = re.search(r"\*\s*(\d+)", tipo_str)
+    if m_star and "(" not in tipo_str[:m_star.start()].lstrip():
+        return "*" + m_star.group(1)
+
+    # Buscar el primer '(' después del nombre del tipo
+    i = tipo_str.find("(")
+    if i == -1:
+        return ""
+
+    # Extraer contenido hasta el ')' balanceado
+    depth, contenido = 0, []
+    for ch in tipo_str[i + 1:]:
+        if ch == "(":
+            depth += 1
+            contenido.append(ch)
+        elif ch == ")":
+            if depth == 0:
+                break
+            depth -= 1
+            contenido.append(ch)
+        else:
+            contenido.append(ch)
+
+    raw = "".join(contenido).strip()
+    # Quitar prefijo KIND= o LEN=
+    raw = re.sub(r"^(?:kind|len)\s*=\s*", "", raw, flags=re.IGNORECASE)
+    return raw
+
 
 def split_lista(s: str) -> list:
     """
@@ -129,15 +171,8 @@ def parsear_prefijo_tipo(prefijo: str) -> dict:
     if m_base:
         resultado["tipo"] = m_base.group(1).strip().upper()
 
-    # Kind inline: REAL(8), INTEGER(KIND=4)
-    m_kind = re.search(r"\(\s*(?:(?:kind|len)\s*=\s*)?(\w+)\s*\)", tipo_str, re.IGNORECASE)
-    if m_kind:
-        resultado["kind"] = m_kind.group(1)
-    else:
-        # Kind con asterisco: REAL*8
-        m_star = re.search(r"\*\s*(\d+)", tipo_str)
-        if m_star:
-            resultado["kind"] = "*" + m_star.group(1)
+    # Kind inline: REAL(8), INTEGER(KIND=4), REAL(KIND=selected_real_kind(15,307))
+    resultado["kind"] = extraer_kind_tipo(tipo_str)
 
     # Atributos (partes[1:])
     for attr in partes[1:]:
@@ -251,12 +286,27 @@ def parsear_declaracion(contenido: str, scope: str, tipo_unidad: str,
                 fila["Truncada"] = "SI" if truncada else "NO"
                 filas.append({**base, **fila})
     else:
-        # F77 sin ::
+        # F77 sin :: — intentar tipo base primero
         m = RE_DECL_F77.match(contenido.strip())
         if not m:
-            return []
+            # Atributo standalone sin tipo: DIMENSION X(100), SAVE X, EXTERNAL PROC
+            m_attr = RE_ATTR_STANDALONE.match(contenido.strip())
+            if not m_attr:
+                return []
+            attr_nombre = m_attr.group(1).upper()
+            lista_str   = m_attr.group(2).strip()
+            # Quitar :: residual si existe (POINTER :: P sin tipo)
+            lista_str = re.sub(r"^::\s*", "", lista_str)
+            for entry in split_lista(lista_str):
+                fila = parsear_var_entry(entry, "", "", "", "", [attr_nombre], False)
+                if fila:
+                    fila["Truncada"] = "SI" if truncada else "NO"
+                    filas.append({**base, **fila})
+            return filas
+
         tipo_base   = re.sub(r"\s+", " ", m.group(1).upper())  # DOUBLE PRECISION
-        kind_suffix = (m.group(2) or "").strip().replace(" ", "")
+        # Usar extraer_kind_tipo para normalizar: quita paréntesis externos y KIND=/LEN=
+        kind_suffix = extraer_kind_tipo(m.group(1) + (m.group(2) or ""))
         lista_str   = m.group(3).strip()
 
         for entry in split_lista(lista_str):

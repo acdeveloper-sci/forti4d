@@ -93,9 +93,13 @@ The parser handles both Fortran dialects by detecting the presence of `::`:
 | `TYPE[*size] var_list` | F77 | `REAL*8 X, Y(100)` |
 | `PARAMETER (NAME=val, ...)` | F77 standalone | `PARAMETER (PI=3.14159, N=100)` |
 | `TYPE, PARAMETER :: NAME=val` | F90 inline | `INTEGER, PARAMETER :: MAX=200` |
+| `ATTR var_list` | F90 attr-only | `DIMENSION X(100)`, `ALLOCATABLE Y` |
 
 Variable lists are split by comma with a paren-depth counter so that array
 dimensions — e.g. `A(10,5)` — are never broken at the interior comma.
+
+KIND expressions with nested parentheses are handled correctly:
+`REAL(KIND=selected_real_kind(15,307))` extracts `selected_real_kind(15,307)`.
 
 ---
 
@@ -122,3 +126,5 @@ The blank (unnamed) COMMON is represented as `(BLANK)`, consistent with
   is not analyzed here; it is reserved for a future `equivalencias.py` step.
 - This script requires `perfilador` (audit CSVs) and `inventario` to have run
   first. In the pipeline it is step 10, immediately after `common_blocks`.
+- Derived TYPE definitions and their component fields are extracted separately
+  by `tipos_derivados.py` (step 11).

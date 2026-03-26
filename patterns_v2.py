@@ -20,7 +20,21 @@ RE_BLOCK_DATA = re.compile(r"^\s*block\s*data\b(?:\s+(\w+))?", re.IGNORECASE)
 # CORREGIDO: Ahora captura el nombre opcional en el grupo 1
 RE_INTERFACE = re.compile(r"^\s*(?:abstract\s+)?interface\b(?:\s+(\w+))?", re.IGNORECASE)
 RE_MODULE_PROCEDURE = re.compile(r"^\s*module\s*procedure\b", re.IGNORECASE)
-RE_TYPE_DEF = re.compile(r"^\s*type\b\s*(?:,\s*[\w\s,()]+)?\s*::\s*(\w+)", re.IGNORECASE)
+# Detecta TYPE definitions en ambas formas:
+#   F90 con ::  →  TYPE [, attrs] :: nombre
+#   F90/F95 sin :: →  TYPE nombre
+# NO detecta TYPE(nombre) (uso del tipo) ni TYPE IS (...) (SELECT TYPE).
+# Nota: solo se usa para detección (bool); tipos_derivados.py usa sus propios
+# patrones locales para extraer el nombre.
+RE_TYPE_DEF = re.compile(
+    r"^\s*type\b\s*"
+    r"(?:"
+    r"(?:,\s*[\w\s,()]+)?\s*::\s*\w+"   # F90 con :: (atributos opcionales)
+    r"|"
+    r"\w+(?!\w)(?!\s*\()"               # F90 sin :: — (?!\w) previene backtracking a prefijo
+    r")",
+    re.IGNORECASE,
+)
 RE_ENUM_DEF = re.compile(r"^\s*enum\b\s*,\s*bind\s*\(", re.IGNORECASE)
 RE_ENUMERATOR = re.compile(r"^\s*enumerator\b", re.IGNORECASE)
 
