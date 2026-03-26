@@ -10,6 +10,14 @@ Fuentes (todas opcionales salvo reporte_inventario.csv):
   reporte_densidad.csv      → perfiles de sentencias (% cálculo/control/IO…)
   reporte_alcanzabilidad.csv→ estado ALCANZABLE / NO_ALCANZABLE / ENTRADA
   common_uso.csv            → COMMON blocks usados (agregado por unidad)
+  simbolos_variables.csv    → N_Vars_Locales, N_Params
+  simbolos_firmas.csv       → N_Args_Formales
+  simbolos_implicit.csv     → Implicit_None
+  tipos_definicion.csv      → N_Tipos_Derivados
+  equivalencias.csv         → Tiene_Equiv, N_Grupos_Equiv
+  audit/*_DEBUG.csv         → N_Data_Stmts, N_Entry_Stmts (scope resolution)
+
+Output: reporte_consolidado.csv — 34 columnas, una fila por unidad.
 """
 
 import csv
@@ -33,6 +41,7 @@ SIMB_FIRMAS = RUTA_RESULTADOS / "simbolos_firmas.csv"
 SIMB_IMPL   = RUTA_RESULTADOS / "simbolos_implicit.csv"
 TIPOS_DEF   = RUTA_RESULTADOS / "tipos_definicion.csv"
 EQUIV_CSV   = RUTA_RESULTADOS / "equivalencias.csv"
+RUTA_AUDIT  = RUTA_RESULTADOS / "audit"
 
 SALIDA_CSV  = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
@@ -94,6 +103,68 @@ def safe_int(val, default=0):
         return int(val)
     except (TypeError, ValueError):
         return default
+
+
+# =============================================================================
+# CONTEO DE SENTENCIAS DESDE AUDIT CSVs
+# =============================================================================
+
+_AUDIT_KINDS = {"DATA_STMT", "ENTRY_STMT"}
+
+def contar_stmts_audit(inv_raw: dict) -> dict:
+    """
+    Recorre audit/*_DEBUG.csv y cuenta DATA_STMT y ENTRY_STMT por unidad.
+    Usa scope resolution idéntica a complejidad.py: unidad más interna
+    cuyo rango [Linea_Inicio, Linea_Fin] contiene la línea.
+
+    Retorna dict (Archivo, Unidad) → {"N_Data_Stmts": int, "N_Entry_Stmts": int}.
+    Devuelve {} si el directorio audit/ no existe.
+    """
+    if not RUTA_AUDIT.exists():
+        return {}
+
+    # Agrupar unidades por archivo con sus rangos de línea
+    mapa_por_archivo = defaultdict(list)
+    for (archivo, nombre), row in inv_raw.items():
+        try:
+            li = int(row.get("Linea_Inicio", 0))
+            lf = int(row.get("Linea_Fin", 0))
+        except (ValueError, TypeError):
+            li = lf = 0
+        mapa_por_archivo[archivo].append((li, lf, nombre))
+
+    conteos = {}  # (Archivo, Unidad) → {"N_Data_Stmts": n, "N_Entry_Stmts": n}
+
+    for archivo, unidades in mapa_por_archivo.items():
+        debug_file = RUTA_AUDIT / f"{archivo}_DEBUG.csv"
+        if not debug_file.exists():
+            continue
+
+        with open(debug_file, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                kind = row.get("Kind", "")
+                if kind not in _AUDIT_KINDS:
+                    continue
+                try:
+                    n_linea = int(row["Linea"])
+                except (ValueError, KeyError):
+                    continue
+
+                # Unidad más interna que contiene n_linea
+                candidatos = [(li, lf, nom) for li, lf, nom in unidades if li <= n_linea <= lf]
+                if not candidatos:
+                    continue
+                _, _, nombre = max(candidatos, key=lambda t: t[0])
+
+                k = (archivo, nombre)
+                if k not in conteos:
+                    conteos[k] = {"N_Data_Stmts": 0, "N_Entry_Stmts": 0}
+                if kind == "DATA_STMT":
+                    conteos[k]["N_Data_Stmts"] += 1
+                else:
+                    conteos[k]["N_Entry_Stmts"] += 1
+
+    return conteos
 
 
 # =============================================================================
@@ -160,8 +231,15 @@ def cargar_fuentes():
     print(f"  tipos_def    : {sum(len(v) for v in tipos_multi.values())} tipos en {len(tipos_multi)} unidades")
     print(f"  equivalencias: {sum(len(v) for v in equiv_multi.values())} vars en {len(equiv_multi)} unidades")
 
+    audit_stmts = contar_stmts_audit(inv_raw)
+    n_data  = sum(v["N_Data_Stmts"]  for v in audit_stmts.values())
+    n_entry = sum(v["N_Entry_Stmts"] for v in audit_stmts.values())
+    if audit_stmts:
+        print(f"  audit stmts  : {n_data} DATA_STMT, {n_entry} ENTRY_STMT en {len(audit_stmts)} unidades")
+
     return (inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
-            common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi)
+            common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi,
+            audit_stmts)
 
 
 # =============================================================================
@@ -169,7 +247,8 @@ def cargar_fuentes():
 # =============================================================================
 
 def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
-                    common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi):
+                    common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi,
+                    audit_stmts):
     filas = []
 
     for (archivo, nombre), inv in inv_raw.items():
@@ -230,6 +309,11 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
         tiene_equiv  = "SI" if equiv_rows else "NO"
         n_grupos_equiv = len({r.get("ID_Grupo", "") for r in equiv_rows} - {""}) if equiv_rows else 0
 
+        # ---- AUDIT STATEMENT COUNTS ----
+        ast = audit_stmts.get(k, {})
+        n_data_stmts  = ast.get("N_Data_Stmts",  0)
+        n_entry_stmts = ast.get("N_Entry_Stmts", 0)
+
         # ---- FLAGS del inventario ----
         legacy_flags = inv.get("Legacy", "").strip()
         io_flags     = inv.get("IO",     "").strip()
@@ -273,6 +357,8 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
             "N_Tipos_Derivados": n_tipos,
             "Tiene_Equiv":       tiene_equiv,
             "N_Grupos_Equiv":    n_grupos_equiv,
+            "N_Data_Stmts":      n_data_stmts,
+            "N_Entry_Stmts":     n_entry_stmts,
             # Flags de auditoría
             "Legacy_Flags":   legacy_flags,
             "IO_Flags":       io_flags,
@@ -295,6 +381,7 @@ COLUMNAS = [
     "Estado", "Via_Entradas",
     "N_Vars_Locales", "N_Params", "N_Args_Formales", "Implicit_None", "N_Tipos_Derivados",
     "Tiene_Equiv", "N_Grupos_Equiv",
+    "N_Data_Stmts", "N_Entry_Stmts",
     "Legacy_Flags", "IO_Flags",
 ]
 

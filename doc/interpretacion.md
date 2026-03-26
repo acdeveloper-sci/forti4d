@@ -7,7 +7,7 @@ risk. Open it first to orient the analysis — it tells you *where to look*
 before you dig into the detail reports.
 
 For deeper analysis, `reporte_consolidado.csv` is the primary analysis surface.
-It has one row per program unit and 32 columns covering size, complexity,
+It has one row per program unit and 34 columns covering size, complexity,
 coupling, density, reachability, COMMON block usage, and E4 symbol summary
 (variable counts, formal arguments, IMPLICIT NONE status, EQUIVALENCE aliasing).
 

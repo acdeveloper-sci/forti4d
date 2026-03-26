@@ -67,14 +67,14 @@ inventario.py
 - **Role:** Classifies each source file into an architectural role based on its Fan-In/Fan-Out profile: `NODO_CRITICO` (high Fan-In), `ORQUESTADOR` (high Fan-Out), `ENTRY_POINT` (executable), `OBRERO` (service routine), `ISLA` (no connections), or `MIXTO`.
 
 #### `analisis_cruzado.py`
-- **Reads:** `reporte_densidad.csv`, `dep_03_matriz_impacto.csv`
+- **Reads:** `reporte_densidad.csv`, `dep_03_matriz_impacto.csv` + optionally `reporte_alcanzabilidad.csv`, `simbolos_implicit.csv`, `equivalencias.csv`
 - **Writes:** `reporte_estrategia_migracion.csv`
-- **Role:** Assigns a migration strategy to each unit by crossing density metrics with coupling data. Computes two composite indices — ICM (migration complexity) and IVC (calculation value) — and applies a rule engine to classify each unit as: `MIGRACION_DIRECTA`, `MIGRACION_ESTANDAR`, `REEMPLAZAR_LIB`, `REFACTORIZAR_CORE`, `REESCRIBIR_AISLADO`, `ANALIZAR_UTILIDAD`, or `ELIMINAR`.
+- **Role:** Assigns a migration strategy to each unit by crossing density metrics with coupling data. Computes two composite indices — ICM (migration complexity) and IVC (calculation value) — and applies a rule engine to classify each unit as: `MIGRACION_DIRECTA`, `MIGRACION_ESTANDAR`, `REEMPLAZAR_LIB`, `REFACTORIZAR_CORE`, `REESCRIBIR_AISLADO`, `ANALIZAR_UTILIDAD`, or `ELIMINAR`. When reachability data is present, confirmed `NO_ALCANZABLE` units are forced to `ELIMINAR`. When E4 data is present, adds a penalty (max 7 points) to ICM for units without IMPLICIT NONE and/or with EQUIVALENCE aliasing.
 
 #### `resumen_ejecutivo.py`
-- **Reads:** `reporte_inventario.csv`, `dep_03_matriz_impacto.csv`
+- **Reads:** `reporte_inventario.csv`, `dep_03_matriz_impacto.csv` + optionally `simbolos_implicit.csv`, `equivalencias.csv`, `common_uso.csv`, `simbolos_variables.csv`
 - **Writes:** `RESUMEN_PROYECTO.md`, `estadisticas_por_archivo.csv`
-- **Role:** Produces a high-level executive summary in Markdown. Reports global metrics (LOC, unit counts, type distribution), top monolithic files, legacy/I/O health indicators, and the most critical and most orchestrating units.
+- **Role:** Produces a high-level executive summary in Markdown. Reports global metrics (LOC, unit counts, type distribution), top monolithic files, legacy/I/O health indicators, and the most critical and most orchestrating units. When E4 data is present, adds a "Scope Health" section with IMPLICIT NONE coverage, EQUIVALENCE/COMMON exposure, scope-clean unit count, and top units by variable density.
 
 ---
 
@@ -118,9 +118,9 @@ clones.py           ─── reads source files + reporte_inventario.csv
 - **Role:** Precise SLOC counting per unit. Uses `reader_logical.py` to classify each physical line as BLANK, COMMENT, CODE, or CONTINUATION. Computes LOC, SLOC_fisico (LOC minus blanks and comments), SLOC_neto (logical statements only), and comment density percentage.
 
 #### `consolidar.py`
-- **Reads:** `reporte_inventario.csv`, `reporte_sloc.csv`, `reporte_complejidad.csv`, `dep_03_matriz_impacto.csv`, `reporte_densidad.csv`, `reporte_alcanzabilidad.csv`, `common_uso.csv`, `simbolos_variables.csv`, `simbolos_firmas.csv`, `simbolos_implicit.csv`, `tipos_definicion.csv`, `equivalencias.csv`
+- **Reads:** `reporte_inventario.csv`, `reporte_sloc.csv`, `reporte_complejidad.csv`, `dep_03_matriz_impacto.csv`, `reporte_densidad.csv`, `reporte_alcanzabilidad.csv`, `common_uso.csv`, `simbolos_variables.csv`, `simbolos_firmas.csv`, `simbolos_implicit.csv`, `tipos_definicion.csv`, `equivalencias.csv`, `audit/*_DEBUG.csv`
 - **Writes:** `reporte_consolidado.csv`
-- **Role:** Joins all per-unit reports into a single 32-column CSV (one row per unit). Adds the derived metric CC_SLOC and E4 symbol summary columns (N_Vars_Locales, N_Params, N_Args_Formales, Implicit_None, N_Tipos_Derivados, Tiene_Equiv, N_Grupos_Equiv). Must run after all other analysis scripts.
+- **Role:** Joins all per-unit reports into a single 34-column CSV (one row per unit). Adds the derived metric CC_SLOC, E4 symbol summary columns (N_Vars_Locales, N_Params, N_Args_Formales, Implicit_None, N_Tipos_Derivados, Tiene_Equiv, N_Grupos_Equiv), and statement-level counts from the audit CSVs (N_Data_Stmts, N_Entry_Stmts). Must run after all other analysis scripts.
 
 #### `clones.py`
 - **Reads:** `reporte_inventario.csv`, Fortran source files

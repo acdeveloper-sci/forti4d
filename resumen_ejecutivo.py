@@ -9,6 +9,12 @@ from config import RUTA_RESULTADOS
 INVENTARIO   = RUTA_RESULTADOS / "reporte_inventario.csv"
 DEPENDENCIAS = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
 
+# Fuentes opcionales E4
+SIMBOLOS_IMPL_CSV = RUTA_RESULTADOS / "simbolos_implicit.csv"
+EQUIVALENCIAS_CSV = RUTA_RESULTADOS / "equivalencias.csv"
+COMMON_USO_CSV    = RUTA_RESULTADOS / "common_uso.csv"
+SIMBOLOS_VARS_CSV = RUTA_RESULTADOS / "simbolos_variables.csv"
+
 # Salidas
 OUT_MD  = RUTA_RESULTADOS / "RESUMEN_PROYECTO.md"
 OUT_CSV = RUTA_RESULTADOS / "estadisticas_por_archivo.csv"
@@ -52,6 +58,77 @@ def cargar_datos():
                 dep_rows.append(row)
 
     return inv_rows, dep_rows
+
+
+def cargar_scope_health():
+    """
+    Carga los CSVs E4 opcionales y retorna cuatro estructuras:
+      impl_none_set  — set (Archivo, Unidad) con IMPLICIT NONE
+      equiv_set      — set (Archivo, Unidad) con al menos un grupo EQUIVALENCE
+      common_set     — set (Archivo, Unidad) con al menos un bloque COMMON
+      vars_count     — Counter (Archivo, Unidad) → nº de variables locales (excl. PARAMETERs)
+    Cualquiera puede estar vacío si el CSV correspondiente no existe.
+    """
+    impl_none_set = set()
+    if SIMBOLOS_IMPL_CSV.exists():
+        with open(SIMBOLOS_IMPL_CSV, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("Es_None", "").strip() == "SI":
+                    impl_none_set.add((row.get("Archivo", "").strip(), row.get("Unidad", "").strip()))
+
+    equiv_set = set()
+    if EQUIVALENCIAS_CSV.exists():
+        with open(EQUIVALENCIAS_CSV, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                equiv_set.add((row.get("Archivo", "").strip(), row.get("Unidad", "").strip()))
+
+    common_set = set()
+    if COMMON_USO_CSV.exists():
+        with open(COMMON_USO_CSV, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                common_set.add((row.get("Archivo", "").strip(), row.get("Unidad", "").strip()))
+
+    vars_count = Counter()
+    if SIMBOLOS_VARS_CSV.exists():
+        with open(SIMBOLOS_VARS_CSV, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("Es_Parametro", "").strip() != "SI":
+                    clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
+                    vars_count[clave] += 1
+
+    return impl_none_set, equiv_set, common_set, vars_count
+
+
+def calcular_scope_stats(inv_rows, impl_none_set, equiv_set, common_set, vars_count):
+    """
+    Calcula las métricas de salud del scope a partir de los datos E4.
+    Retorna None si no hay datos E4 disponibles.
+    """
+    if not (impl_none_set or equiv_set or common_set or vars_count):
+        return None
+
+    total = len(inv_rows)
+    unidades = [(r["Archivo"], r["Nombre"] if "Nombre" in r else r.get("Unidad", "")) for r in inv_rows]
+
+    n_impl_none = sum(1 for u in unidades if u in impl_none_set)
+    n_equiv     = sum(1 for u in unidades if u in equiv_set)
+    n_common    = sum(1 for u in unidades if u in common_set)
+    n_clean     = sum(
+        1 for u in unidades
+        if u in impl_none_set and u not in equiv_set and u not in common_set
+    )
+
+    top5_vars = vars_count.most_common(5)
+
+    return {
+        "total":       total,
+        "n_impl_none": n_impl_none,
+        "n_equiv":     n_equiv,
+        "n_common":    n_common,
+        "n_clean":     n_clean,
+        "top5_vars":   top5_vars,
+        "has_data":    True,
+    }
 
 
 def calcular_resumen(inv_rows, dep_rows):
@@ -134,7 +211,7 @@ def calcular_resumen(inv_rows, dep_rows):
     return stats
 
 
-def generar_reporte_markdown(stats):
+def generar_reporte_markdown(stats, scope_stats=None):
     # CAMBIO 3: utf-8-sig para generar el reporte MD compatible con Windows
     with open(OUT_MD, "w", encoding="utf-8-sig") as f:
         f.write("# RESUMEN EJECUTIVO DE CÓDIGO FUENTE DEL PROYECTO FORTRAN\n\n")
@@ -194,13 +271,35 @@ def generar_reporte_markdown(stats):
         f.write(f"- **Programas Principales Implícitos:** {stats['implicit_main_count']} (Candidatos a refactorizar)\n")
         f.write("\n")
 
-        # 5. ESTRUCTURA (Dependencias)
+        # 5. SALUD DEL SCOPE (E4)
+        if scope_stats and scope_stats.get("has_data"):
+            ss = scope_stats
+            total = ss["total"]
+            pct = lambda n: f"{(n/total*100):.1f}%" if total else "—"
+            f.write("## 5. Salud del Scope (E4)\n\n")
+            f.write("| Indicador | Unidades | % del total |\n")
+            f.write("| :--- | :---: | :---: |\n")
+            f.write(f"| Con IMPLICIT NONE | {ss['n_impl_none']} | {pct(ss['n_impl_none'])} |\n")
+            f.write(f"| Sin IMPLICIT NONE (riesgo de tipo) | {total - ss['n_impl_none']} | {pct(total - ss['n_impl_none'])} |\n")
+            f.write(f"| Con EQUIVALENCE (aliasing) | {ss['n_equiv']} | {pct(ss['n_equiv'])} |\n")
+            f.write(f"| Con COMMON blocks | {ss['n_common']} | {pct(ss['n_common'])} |\n")
+            f.write(f"| Scope limpio (IMPLICIT NONE, sin EQUIV, sin COMMON) | {ss['n_clean']} | {pct(ss['n_clean'])} |\n")
+            f.write("\n")
+            if ss["top5_vars"]:
+                f.write("### Top 5 unidades por densidad de variables locales\n\n")
+                f.write("| Unidad | Archivo | Vars locales |\n")
+                f.write("| :--- | :--- | :---: |\n")
+                for (arch, unidad), n in ss["top5_vars"]:
+                    f.write(f"| {unidad} | {arch} | {n} |\n")
+                f.write("\n")
+
+        # 6. ESTRUCTURA (Dependencias)
         top_usados = stats["top_usados"]
         # Filtrar UNKNOWN para el reporte ejecutivo si se desea,
         # pero a veces es útil ver qué desconocido es muy usado.
 
         if top_usados:
-            f.write("## 5. Unidades Críticas (más reutilizadas, mayor Fan-In)\n")
+            f.write("## 6. Unidades Críticas (más reutilizadas, mayor Fan-In)\n")
             f.write("Unidades que son el 'corazón' del sistema.\n\n")
             f.write("| Unidad | Tipo | Archivo | Es llamada por (veces) |\n")
             f.write("| :--- | :--- | :--- | :---: |\n")
@@ -213,7 +312,7 @@ def generar_reporte_markdown(stats):
         # pero a veces es útil ver qué desconocido es muy usado.
 
         if top_complejos:
-            f.write("## 6. Unidades Orquestadoras (mayor complejidad, mayor Fan-Out)\n")
+            f.write("## 7. Unidades Orquestadoras (mayor complejidad, mayor Fan-Out)\n")
             f.write("Unidades que coordinan el flujo y dependen de muchas partes del sistema.\n\n")
             f.write("| Unidad | Tipo | Archivo | Llama a (nº dependencias) |\n")
             f.write("| :--- | :--- | :--- | :---: |\n")
@@ -249,7 +348,15 @@ def main():
     print("Generando Resumen Ejecutivo...")
     inv, dep = cargar_datos()
     stats = calcular_resumen(inv, dep)
-    generar_reporte_markdown(stats)
+
+    impl_none_set, equiv_set, common_set, vars_count = cargar_scope_health()
+    scope_stats = calcular_scope_stats(inv, impl_none_set, equiv_set, common_set, vars_count)
+    if scope_stats:
+        print(f"  E4: {scope_stats['n_impl_none']}/{scope_stats['total']} IMPLICIT NONE, "
+              f"{scope_stats['n_equiv']} EQUIV, {scope_stats['n_common']} COMMON, "
+              f"{scope_stats['n_clean']} scope-limpias")
+
+    generar_reporte_markdown(stats, scope_stats)
     generar_csv_archivos(stats)
 
 

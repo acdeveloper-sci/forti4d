@@ -3,7 +3,7 @@
 ## Purpose
 
 Joins all per-unit reports into a single CSV with one row per unit and
-32 columns. Must run after all other analysis scripts. Also adds the
+34 columns. Must run after all other analysis scripts. Also adds the
 derived metric `CC_SLOC`.
 
 ---
@@ -26,6 +26,7 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 | `SIMB_IMPL` | `RUTA_RESULTADOS / "simbolos_implicit.csv"` | IMPLICIT rules per unit |
 | `TIPOS_DEF` | `RUTA_RESULTADOS / "tipos_definicion.csv"` | Derived TYPE definitions |
 | `EQUIV_CSV` | `RUTA_RESULTADOS / "equivalencias.csv"` | EQUIVALENCE aliasing groups |
+| `RUTA_AUDIT` | `RUTA_RESULTADOS / "audit"` | Directory of `*_DEBUG.csv` files (for DATA/ENTRY counts) |
 | `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_consolidado.csv"` | Output |
 
 All sources except `INVENTARIO` are optional — missing files produce empty
@@ -75,6 +76,8 @@ One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
 | `N_Tipos_Derivados` | tipos_definicion | Count of derived TYPE definitions hosted in this unit |
 | `Tiene_Equiv` | equivalencias | `SI` if the unit has any EQUIVALENCE aliasing groups, `NO` otherwise |
 | `N_Grupos_Equiv` | equivalencias | Number of distinct aliasing groups in the unit |
+| `N_Data_Stmts` | audit CSVs | Count of DATA statements in the unit |
+| `N_Entry_Stmts` | audit CSVs | Count of ENTRY statements in the unit |
 | `Legacy_Flags` | inventario | Legacy constructs detected (from inventory) |
 | `IO_Flags` | inventario | I/O statements detected (from inventory) |
 
@@ -92,6 +95,11 @@ One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
   `EQUIV_CSV`) may contain multiple rows per unit and are aggregated into
   summary counts. These sources require `simbolos`, `tipos_derivados`, and
   `equivalencias` to have run first.
+- `N_Data_Stmts` and `N_Entry_Stmts` are computed by scanning
+  `audit/*_DEBUG.csv` directly using scope resolution (innermost unit
+  whose `[Linea_Inicio, Linea_Fin]` range contains the statement line).
+  The `audit/` directory must be present (produced by `perfilador.py`).
+  If missing, both columns default to 0.
 - `reporte_clones.csv` (produced by `clones.py`) is not currently joined here.
   Clone state per unit is read directly by `priorizacion.py`. A future
   integration could add `Estado_Clon` and `N_Copias` columns to this report.
