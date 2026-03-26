@@ -34,6 +34,7 @@ OUT_GRAFO     = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
 OUT_IMPACTO   = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
 OUT_HUERFANOS = RUTA_RESULTADOS / "dep_04_externos_huerfanos.csv"
 OUT_ARCHIVOS  = RUTA_RESULTADOS / "dep_05_dependencia_archivos.csv"
+OUT_INCLUDES  = RUTA_RESULTADOS / "dep_06_include_files.csv"
 
 # Jerarquía de Naturaleza (Menor índice = Más fuerte)
 RANKING_NATURALEZA = {
@@ -787,6 +788,33 @@ def main():
             w.writeheader()
             w.writerows(file_rows)
         print(f"Generado: {OUT_ARCHIVOS}")
+
+        # dep_06: INCLUDE file references — one row per INCLUDE statement
+        include_rows = []
+        seen_includes = set()
+        for item in all_raw_deps:
+            if item.get("dep_type") != "INCLUDE":
+                continue
+            target = item["target_raw"]
+            key = (item["source_file"], item["source_unit"], target)
+            if key in seen_includes:
+                continue
+            seen_includes.add(key)
+            estado = "PRESENTE" if (CARPETA_CODIGO / target).exists() else "FALTANTE"
+            include_rows.append({
+                "Archivo_Origen":   item["source_file"],
+                "Unidad_Origen":    item["source_unit"],
+                "Archivo_Incluido": target,
+                "Estado":           estado,
+            })
+        include_rows.sort(key=lambda r: (r["Archivo_Origen"], r["Unidad_Origen"]))
+
+        with open(OUT_INCLUDES, "w", newline="", encoding="utf-8") as f:
+            keys = ["Archivo_Origen", "Unidad_Origen", "Archivo_Incluido", "Estado"]
+            w = csv.DictWriter(f, fieldnames=keys)
+            w.writeheader()
+            w.writerows(include_rows)
+        print(f"Generado: {OUT_INCLUDES} ({len(include_rows)} referencias INCLUDE)")
 
 
 if __name__ == "__main__":

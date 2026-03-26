@@ -45,6 +45,7 @@ STEPS = [
     ("consolidar",          "consolidar.py",           "Join all reports into reporte_consolidado.csv"),
     ("grafo_visual",        "grafo_visual.py",         "Generate call graph DOT files"),
     ("priorizacion",        "priorizacion.py",         "Compute composite risk score and rank units for migration"),
+    ("reporte_html",        "reporte_html.py",         "Generate self-contained HTML report"),
 ]
 
 STEP_NAMES = [s[0] for s in STEPS]

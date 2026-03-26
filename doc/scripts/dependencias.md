@@ -22,6 +22,7 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 | `OUT_IMPACTO` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Fan-In and Fan-Out per unit |
 | `OUT_HUERFANOS` | `RUTA_RESULTADOS / "dep_04_externos_huerfanos.csv"` | References with no known definition |
 | `OUT_ARCHIVOS` | `RUTA_RESULTADOS / "dep_05_dependencia_archivos.csv"` | File-level dependency summary |
+| `OUT_INCLUDES` | `RUTA_RESULTADOS / "dep_06_include_files.csv"` | Explicit INCLUDE file references |
 
 ---
 
@@ -77,6 +78,18 @@ References found in source code with no matching definition in the corpus
 
 ### `dep_05_dependencia_archivos.csv`
 Aggregated dependency summary at file level.
+
+### `dep_06_include_files.csv`
+Explicit INCLUDE file references — one row per unique `(Archivo_Origen, Unidad_Origen, Archivo_Incluido)` triple.
+
+| Column | Description |
+| :--- | :--- |
+| `Archivo_Origen` | Source file containing the INCLUDE statement |
+| `Unidad_Origen` | Unit (scope) in which the INCLUDE appears |
+| `Archivo_Incluido` | Filename referenced by the INCLUDE directive |
+| `Estado` | `PRESENTE` if the file exists in `CARPETA_CODIGO`; `FALTANTE` otherwise |
+
+Duplicate INCLUDE references (same triple, different lines) are deduplicated.
 
 ---
 
