@@ -3,11 +3,12 @@ priorizacion.py
 Computes a composite risk/effort score for each unit and ranks them
 for migration planning.
 
-Score (0-100) weighted across four signals:
+Score (0-100) weighted across five signals:
   CC           30%  — cyclomatic complexity (normalized by corpus max)
   Fan_In       30%  — call-graph criticality (normalized by corpus max)
   Pct_Legacy   20%  — legacy construct density
-  Clone        20%  — penalty for being part of a diverged/similar duplicate group
+  Clone        15%  — penalty for being part of a diverged/similar duplicate group
+  E4_Risk      5%   — E4 scope risk: no IMPLICIT NONE and/or EQUIVALENCE aliasing
 
 Units with Estado = NO_ALCANZABLE (dead code) are separated into a
 DEAD_CODE priority tier and placed at the bottom of the list.
@@ -33,7 +34,14 @@ SALIDA_CSV   = RUTA_RESULTADOS / "reporte_priorizacion.csv"
 W_CC        = 0.30
 W_FAN_IN    = 0.30
 W_LEGACY    = 0.20
-W_CLONE     = 0.20
+W_CLONE     = 0.15
+W_E4        = 0.05
+
+# E4_Risk sub-weights (must sum to 1.0)
+# No IMPLICIT NONE: harder to infer types, higher migration risk.
+# EQUIVALENCE: memory aliasing, incompatible with safe refactoring.
+W_E4_IMPL   = 0.70   # no IMPLICIT NONE
+W_E4_EQUIV  = 0.30   # has EQUIVALENCE aliasing
 
 # Clone penalty per worst state
 CLONE_PENALTY = {
@@ -172,9 +180,16 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
         estado_clon = clones.get((archivo, unidad.upper()), "")
         s_clone = CLONE_PENALTY.get(estado_clon, 0.0)
 
+        # E4 Risk component
+        sin_impl_none = row.get("Implicit_None", "") != "SI"
+        tiene_equiv   = row.get("Tiene_Equiv",   "") == "SI"
+        s_e4 = min(W_E4_IMPL * (1.0 if sin_impl_none else 0.0) +
+                   W_E4_EQUIV * (1.0 if tiene_equiv   else 0.0), 1.0)
+
         # Weighted score (0-100)
         score = (W_CC * s_cc + W_FAN_IN * s_fanin +
-                 W_LEGACY * s_legacy + W_CLONE * s_clone) * 100
+                 W_LEGACY * s_legacy + W_CLONE * s_clone +
+                 W_E4 * s_e4) * 100
 
         if estado == "NO_ALCANZABLE":
             prioridad = "DEAD_CODE"
@@ -195,10 +210,13 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
             "Estado_Alcanz":estado,
             "Estado_Clon":  estado_clon,
             "Estrategia":   estrategia_unit,
+            "Implicit_None": row.get("Implicit_None", ""),
+            "Tiene_Equiv":   row.get("Tiene_Equiv", ""),
             "Score_CC":     round(s_cc * W_CC * 100, 1),
             "Score_FanIn":  round(s_fanin * W_FAN_IN * 100, 1),
             "Score_Legacy": round(s_legacy * W_LEGACY * 100, 1),
             "Score_Clon":   round(s_clone * W_CLONE * 100, 1),
+            "Score_E4":     round(s_e4 * W_E4 * 100, 1),
         })
 
     # Sort: by priority tier first, then by score descending
@@ -227,7 +245,8 @@ def main():
         "Archivo", "Unidad", "Tipo",
         "CC", "Fan_In", "Pct_Legacy",
         "Estado_Alcanz", "Estado_Clon", "Estrategia",
-        "Score_CC", "Score_FanIn", "Score_Legacy", "Score_Clon",
+        "Implicit_None", "Tiene_Equiv",
+        "Score_CC", "Score_FanIn", "Score_Legacy", "Score_Clon", "Score_E4",
     ]
 
     with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:

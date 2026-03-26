@@ -74,6 +74,7 @@ python3 pipeline.py --project ../myproject --output out/ --from complejidad --qu
 | `common_blocks` | `common_blocks.py` | Detect COMMON block coupling |
 | `simbolos` | `simbolos.py` | Extract variable/parameter/implicit symbols per unit |
 | `tipos_derivados` | `tipos_derivados.py` | Extract derived TYPE definitions and their components |
+| `equivalencias` | `equivalencias.py` | Detect EQUIVALENCE aliasing groups (union-find) |
 | `alcanzabilidad` | `alcanzabilidad.py` | Dead code detection from entry points |
 | `sloc` | `sloc.py` | Precise SLOC count per unit |
 | `clones` | `clones.py` | Detect identical/similar/diverged duplicate units |
@@ -113,7 +114,7 @@ Terminal output includes per-step timing and a final summary table:
 === Fortran Static Analysis Pipeline ===
 Project : ../athys/mercedes/
 Output  : results/
-Steps   : 17
+Steps   : 18
 
 ────────────────────────────────────────────────────────────
 [1/13] inventario  —  Build unit inventory from source files
@@ -128,5 +129,5 @@ Summary  —  45.1s total
   ✓  dependencias            8.7s
   ...
 
-All 17 steps completed successfully.
+All 18 steps completed successfully.
 ```

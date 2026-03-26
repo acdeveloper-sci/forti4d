@@ -3,8 +3,8 @@
 ## Purpose
 
 Computes a composite risk/effort score for each program unit and ranks them
-for migration planning. Combines four signals — complexity, criticality,
-legacy density, and clone status — into a single ordered list.
+for migration planning. Combines five signals — complexity, criticality,
+legacy density, clone status, and E4 scope risk — into a single ordered list.
 
 ---
 
@@ -21,7 +21,8 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 | `W_CC` | `0.30` | Weight for cyclomatic complexity component |
 | `W_FAN_IN` | `0.30` | Weight for Fan-In (criticality) component |
 | `W_LEGACY` | `0.20` | Weight for legacy construct density component |
-| `W_CLONE` | `0.20` | Weight for clone penalty component |
+| `W_CLONE` | `0.15` | Weight for clone penalty component |
+| `W_E4` | `0.05` | Weight for E4 scope risk component |
 | `UMBRAL_CRITICA` | `40` | Score threshold for `CRITICA` priority |
 | `UMBRAL_ALTA` | `25` | Score threshold for `ALTA` priority |
 | `UMBRAL_MEDIA` | `12` | Score threshold for `MEDIA` priority |
@@ -54,16 +55,19 @@ Dead code units appear last.
 | `Estado_Alcanz` | `ALCANZABLE`, `NO_ALCANZABLE`, or `ENTRADA` |
 | `Estado_Clon` | Worst clone state for this unit: `DIVERGIDO`, `SIMILAR`, `IDENTICO`, or blank |
 | `Estrategia` | Migration strategy recommendation |
+| `Implicit_None` | `SI` / `NO` / blank — from `simbolos_implicit.csv` via consolidado |
+| `Tiene_Equiv` | `SI` / `NO` — whether the unit has EQUIVALENCE aliasing |
 | `Score_CC` | CC component contribution (0–30) |
 | `Score_FanIn` | Fan-In component contribution (0–30) |
 | `Score_Legacy` | Legacy component contribution (0–20) |
-| `Score_Clon` | Clone component contribution (0–20) |
+| `Score_Clon` | Clone component contribution (0–15) |
+| `Score_E4` | E4 Risk component contribution (0–5) |
 
 ---
 
 ## Scoring
 
-**Score = (W_CC × CC_norm + W_FAN_IN × FanIn_norm + W_LEGACY × Legacy_norm + W_CLONE × Clone_norm) × 100**
+**Score = (W_CC × CC_norm + W_FAN_IN × FanIn_norm + W_LEGACY × Legacy_norm + W_CLONE × Clone_norm + W_E4 × E4_norm) × 100**
 
 Each component is normalized to 0–1:
 
@@ -73,6 +77,10 @@ Each component is normalized to 0–1:
 | Fan_In | `min(Fan_In / P95_FanIn, 1.0)` — 95th percentile of Fan_In |
 | Pct_Legacy | `Pct_Legacy / 100` |
 | Clone | `1.0` if DIVERGIDO, `0.5` if SIMILAR, `0.25` if IDENTICO, `0.0` if no clones |
+| E4_Risk | `0.70` if no IMPLICIT NONE + `0.30` if has EQUIVALENCE (capped at 1.0) |
+
+Units with no IMPLICIT statement (implicit typing active) are treated the same
+as units with explicit non-NONE rules — both receive the full E4 penalty.
 
 The 95th percentile is used as the normalization reference (instead of the
 maximum) to prevent a single outlier — such as an IMPLICIT-MAIN unit with

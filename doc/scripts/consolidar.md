@@ -3,7 +3,7 @@
 ## Purpose
 
 Joins all per-unit reports into a single CSV with one row per unit and
-30 columns. Must run after all other analysis scripts. Also adds the
+32 columns. Must run after all other analysis scripts. Also adds the
 derived metric `CC_SLOC`.
 
 ---
@@ -25,6 +25,7 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 | `SIMB_FIRMAS` | `RUTA_RESULTADOS / "simbolos_firmas.csv"` | Formal arguments per unit |
 | `SIMB_IMPL` | `RUTA_RESULTADOS / "simbolos_implicit.csv"` | IMPLICIT rules per unit |
 | `TIPOS_DEF` | `RUTA_RESULTADOS / "tipos_definicion.csv"` | Derived TYPE definitions |
+| `EQUIV_CSV` | `RUTA_RESULTADOS / "equivalencias.csv"` | EQUIVALENCE aliasing groups |
 | `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_consolidado.csv"` | Output |
 
 All sources except `INVENTARIO` are optional — missing files produce empty
@@ -72,6 +73,8 @@ One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
 | `N_Args_Formales` | simbolos_firmas | Count of formal arguments (0 for non-callable units) |
 | `Implicit_None` | simbolos_implicit | `SI` if unit has `IMPLICIT NONE`; `NO` if has rules; empty if no IMPLICIT statement |
 | `N_Tipos_Derivados` | tipos_definicion | Count of derived TYPE definitions hosted in this unit |
+| `Tiene_Equiv` | equivalencias | `SI` if the unit has any EQUIVALENCE aliasing groups, `NO` otherwise |
+| `N_Grupos_Equiv` | equivalencias | Number of distinct aliasing groups in the unit |
 | `Legacy_Flags` | inventario | Legacy constructs detected (from inventory) |
 | `IO_Flags` | inventario | I/O statements detected (from inventory) |
 
@@ -85,9 +88,10 @@ One row per program unit, sorted alphabetically by `Archivo` then `Unidad`.
 - `COMMON_USO` may contain multiple rows per unit (one per block). These are
   aggregated: `N_Common_Bloques` = count of distinct blocks, `Common_Bloques`
   = sorted semicolon-separated names.
-- Symbol sources (`SIMB_VARS`, `SIMB_FIRMAS`, `SIMB_IMPL`, `TIPOS_DEF`) may
-  also contain multiple rows per unit and are aggregated into summary counts.
-  These sources require `simbolos` and `tipos_derivados` to have run first.
+- Symbol sources (`SIMB_VARS`, `SIMB_FIRMAS`, `SIMB_IMPL`, `TIPOS_DEF`,
+  `EQUIV_CSV`) may contain multiple rows per unit and are aggregated into
+  summary counts. These sources require `simbolos`, `tipos_derivados`, and
+  `equivalencias` to have run first.
 - `reporte_clones.csv` (produced by `clones.py`) is not currently joined here.
   Clone state per unit is read directly by `priorizacion.py`. A future
   integration could add `Estado_Clon` and `N_Copias` columns to this report.
