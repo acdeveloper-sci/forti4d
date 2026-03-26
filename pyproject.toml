@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "forti4d"
+version = "0.4.0"
+description = "Fortran static analysis toolkit — MI4D model (4-axis risk & structure inspection)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+keywords = ["fortran", "static-analysis", "legacy-code", "migration"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.scripts]
+forti4d = "forti4d.pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["forti4d*"]
