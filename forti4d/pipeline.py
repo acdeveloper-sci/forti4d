@@ -26,26 +26,28 @@ from pathlib import Path
 
 # Each step: (name, script, description)
 # Order reflects dependency constraints.
+_HERE = Path(__file__).parent
+
 STEPS = [
-    ("inventario",          "inventario.py",          "Build unit inventory from source files"),
-    ("dependencias",        "dependencias.py",         "Build call graph and compute Fan-In/Fan-Out"),
-    ("perfilador",          "perfilador.py",           "Classify statements and produce audit/ DEBUG files"),
-    ("bloques",             None,                      "Block topology analysis (one file per source, to output/)"),
-    ("analisis_estructura", "analisis_estructura.py",  "Classify files by architectural role"),
-    ("analisis_cruzado",    "analisis_cruzado.py",     "Assign migration strategy per unit"),
-    ("resumen_ejecutivo",   "resumen_ejecutivo.py",    "Generate executive summary"),
-    ("complejidad",         "complejidad.py",          "Compute McCabe cyclomatic complexity"),
-    ("common_blocks",       "common_blocks.py",        "Detect COMMON block coupling"),
-    ("simbolos",            "simbolos.py",             "Extract variable/parameter/implicit symbols per unit"),
-    ("tipos_derivados",     "tipos_derivados.py",      "Extract derived TYPE definitions and their components"),
-    ("equivalencias",       "equivalencias.py",        "Detect EQUIVALENCE aliasing groups (union-find)"),
-    ("alcanzabilidad",      "alcanzabilidad.py",       "Dead code detection from entry points"),
-    ("sloc",                "sloc.py",                 "Precise SLOC count per unit"),
-    ("clones",              "clones.py",               "Detect identical/similar/diverged duplicate units"),
-    ("consolidar",          "consolidar.py",           "Join all reports into reporte_consolidado.csv"),
-    ("grafo_visual",        "grafo_visual.py",         "Generate call graph DOT files"),
-    ("priorizacion",        "priorizacion.py",         "Compute composite risk score and rank units for migration"),
-    ("reporte_html",        "reporte_html.py",         "Generate self-contained HTML report"),
+    ("inventario",          "analyzers/inventario.py",          "Build unit inventory from source files"),
+    ("dependencias",        "analyzers/dependencias.py",         "Build call graph and compute Fan-In/Fan-Out"),
+    ("perfilador",          "analyzers/perfilador.py",           "Classify statements and produce audit/ DEBUG files"),
+    ("bloques",             None,                                "Block topology analysis (one file per source, to output/)"),
+    ("analisis_estructura", "analyzers/analisis_estructura.py",  "Classify files by architectural role"),
+    ("analisis_cruzado",    "analyzers/analisis_cruzado.py",     "Assign migration strategy per unit"),
+    ("resumen_ejecutivo",   "analyzers/resumen_ejecutivo.py",    "Generate executive summary"),
+    ("complejidad",         "analyzers/complejidad.py",          "Compute McCabe cyclomatic complexity"),
+    ("common_blocks",       "analyzers/common_blocks.py",        "Detect COMMON block coupling"),
+    ("simbolos",            "analyzers/simbolos.py",             "Extract variable/parameter/implicit symbols per unit"),
+    ("tipos_derivados",     "analyzers/tipos_derivados.py",      "Extract derived TYPE definitions and their components"),
+    ("equivalencias",       "analyzers/equivalencias.py",        "Detect EQUIVALENCE aliasing groups (union-find)"),
+    ("alcanzabilidad",      "analyzers/alcanzabilidad.py",       "Dead code detection from entry points"),
+    ("sloc",                "analyzers/sloc.py",                 "Precise SLOC count per unit"),
+    ("clones",              "analyzers/clones.py",               "Detect identical/similar/diverged duplicate units"),
+    ("consolidar",          "analyzers/consolidar.py",           "Join all reports into reporte_consolidado.csv"),
+    ("grafo_visual",        "analyzers/grafo_visual.py",         "Generate call graph DOT files"),
+    ("priorizacion",        "analyzers/priorizacion.py",         "Compute composite risk score and rank units for migration"),
+    ("reporte_html",        "analyzers/reporte_html.py",         "Generate self-contained HTML report"),
 ]
 
 STEP_NAMES = [s[0] for s in STEPS]
@@ -60,7 +62,7 @@ def run_script(script: str, quiet: bool, env: dict) -> tuple:
     Runs a Python script as a subprocess.
     Returns (success: bool, elapsed: float, output: str).
     """
-    cmd = [sys.executable, script]
+    cmd = [sys.executable, str(_HERE / script)]
     t0  = time.time()
 
     if quiet:
@@ -98,7 +100,7 @@ def run_bloques(quiet: bool, env: dict) -> tuple:
         nombre = debug_file.name.replace("_DEBUG.csv", "")
         salida = bloques_dir / f"{nombre}_bloques.txt"
 
-        cmd = [sys.executable, "analisis_bloques_v8.py", str(debug_file)]
+        cmd = [sys.executable, str(_HERE / "analyzers/analisis_bloques_v8.py"), str(debug_file)]
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
         if result.returncode == 0:
@@ -271,7 +273,7 @@ def main():
             if not args.quiet and msg:
                 print(f"  {msg}")
         else:
-            if not Path(script).exists():
+            if not (_HERE / script).exists():
                 print(f"{RED}  Script not found: {script}{RESET}")
                 success, elapsed = False, 0.0
             else:

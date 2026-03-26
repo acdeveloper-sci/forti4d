@@ -24,7 +24,7 @@ import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN

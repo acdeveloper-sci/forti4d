@@ -2,8 +2,8 @@ import csv
 import sys
 from collections import defaultdict, deque
 
-from inventario import cargar_inventario
-from config import RUTA_RESULTADOS
+from forti4d.analyzers.inventario import cargar_inventario
+from forti4d.config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN

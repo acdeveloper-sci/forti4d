@@ -5,17 +5,17 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 # --- IMPORTACIONES DEL PROYECTO ---
-import reader_logical
-import patterns_v2 as patterns
-import kinds
+import forti4d.lib.reader_logical as reader_logical
+import forti4d.lib.patterns_v2 as patterns
+import forti4d.lib.kinds as kinds
 
 # Usamos la nueva función maestra que acabamos de definir
-from inventario import cargar_inventario
+from forti4d.analyzers.inventario import cargar_inventario
 
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-from config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
 SALIDA_CSV = RUTA_RESULTADOS / "reporte_densidad.csv"
 RUTA_AUDIT = RUTA_RESULTADOS / "audit"

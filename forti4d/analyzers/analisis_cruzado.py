@@ -1,7 +1,7 @@
 import csv
 import sys
 import os
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 # CONFIGURACIÓN
 ARCHIVO_DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"

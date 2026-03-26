@@ -2,7 +2,7 @@ import sys
 import os
 import csv
 from collections import defaultdict
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN

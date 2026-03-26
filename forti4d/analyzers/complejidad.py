@@ -3,8 +3,8 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-from inventario import cargar_inventario
-from config import RUTA_RESULTADOS
+from forti4d.analyzers.inventario import cargar_inventario
+from forti4d.config import RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN

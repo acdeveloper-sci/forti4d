@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import List, Set, Dict
 
 try:
-    from reader_logical import read_logical_lines
-    from patterns_v1 import (
+    from forti4d.lib.reader_logical import read_logical_lines
+    from forti4d.lib.patterns_v1 import (
         RE_PROGRAM,
         RE_MODULE,
         RE_SUBROUTINE,
@@ -23,7 +23,7 @@ except ImportError as e:
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-from config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
 ARCHIVO_SALIDA = RUTA_RESULTADOS / "reporte_inventario.csv"
 
