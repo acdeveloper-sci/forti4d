@@ -25,7 +25,7 @@ from pathlib import Path
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 GRAFO_CSV   = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
 CONSOLIDADO = RUTA_RESULTADOS / "reporte_consolidado.csv"

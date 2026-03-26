@@ -15,9 +15,9 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from inventario import cargar_inventario
-from reader_logical import read_logical_lines
-from config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.analyzers.inventario import cargar_inventario
+from forti4d.lib.reader_logical import read_logical_lines
+from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN

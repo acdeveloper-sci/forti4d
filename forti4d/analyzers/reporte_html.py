@@ -15,7 +15,7 @@ import html
 from datetime import datetime
 from pathlib import Path
 
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 PRIORIDAD_CSV = RUTA_RESULTADOS / "reporte_priorizacion.csv"
 SALIDA_HTML   = RUTA_RESULTADOS / "reporte.html"

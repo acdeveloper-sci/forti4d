@@ -3,7 +3,7 @@ import os
 import csv
 from collections import Counter, defaultdict
 from statistics import mean, median
-from config import RUTA_RESULTADOS
+from forti4d.config import RUTA_RESULTADOS
 
 # Archivos de entrada
 INVENTARIO   = RUTA_RESULTADOS / "reporte_inventario.csv"

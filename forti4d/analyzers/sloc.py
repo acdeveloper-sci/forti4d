@@ -2,9 +2,9 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-import reader_logical
-from inventario import cargar_inventario
-from config import CARPETA_CODIGO, RUTA_RESULTADOS
+import forti4d.lib.reader_logical as reader_logical
+from forti4d.analyzers.inventario import cargar_inventario
+from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
 # =============================================================================
 # CONFIGURACIÓN
