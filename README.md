@@ -120,7 +120,7 @@ priorizacion.py        →  reporte_priorizacion.csv
 | `reporte_alcanzabilidad.csv` | `alcanzabilidad.py` | Reachability from entry points (dead code detection) |
 | `reporte_sloc.csv` | `sloc.py` | Precise SLOC count per unit (LOC, blanks, comments, continuations) |
 | `reporte_clones.csv` | `clones.py` | Identical/similar/diverged duplicate unit pairs |
-| `reporte_consolidado.csv` | `consolidar.py` | All metrics joined — one row per unit, 32 columns |
+| `reporte_consolidado.csv` | `consolidar.py` | All metrics joined — one row per unit, 34 columns |
 | `grafo_*.dot` | `grafo_visual.py` | Graphviz call graph (full, simplified, or per entry point) |
 | `reporte_priorizacion.csv` | `priorizacion.py` | Units ranked by composite migration risk score |
 

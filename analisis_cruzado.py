@@ -4,9 +4,19 @@ import os
 from config import RUTA_RESULTADOS
 
 # CONFIGURACIÓN
-ARCHIVO_DENSIDAD  = RUTA_RESULTADOS / "reporte_densidad.csv"
-ARCHIVO_IMPACTO   = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
-SALIDA_ESTRATEGIA = RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"
+ARCHIVO_DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"
+ARCHIVO_IMPACTO     = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+SALIDA_ESTRATEGIA   = RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"
+
+# Fuentes opcionales E4 / alcanzabilidad (se usan si existen)
+ALCANZABILIDAD_CSV  = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
+SIMBOLOS_IMPL_CSV   = RUTA_RESULTADOS / "simbolos_implicit.csv"
+EQUIVALENCIAS_CSV   = RUTA_RESULTADOS / "equivalencias.csv"
+
+# Penalización E4 sobre ICM (puntos aditivos, escala 0-100)
+E4_PENALTY_MAX = 7.0   # máximo añadido al ICM por riesgo E4
+W_E4_IMPL  = 0.70      # sin IMPLICIT NONE
+W_E4_EQUIV = 0.30      # tiene EQUIVALENCE
 
 # Mapa de Prioridad (Menor número = Mayor urgencia)
 PRIORIDAD_MAP = {
@@ -36,6 +46,43 @@ def clip(val, max_val):
     return min(val, max_val)
 
 
+def cargar_alcanzabilidad():
+    """Retorna dict (Archivo, Unidad) → Estado. Vacío si el CSV no existe."""
+    result = {}
+    if not ALCANZABILIDAD_CSV.exists():
+        return result
+    with open(ALCANZABILIDAD_CSV, encoding="utf-8-sig", errors="replace") as f:
+        for row in csv.DictReader(f):
+            clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
+            result[clave] = row.get("Estado", "").strip()
+    return result
+
+
+def cargar_e4():
+    """
+    Retorna (impl_none_set, equiv_set):
+      impl_none_set — (Archivo, Unidad) que tienen IMPLICIT NONE (Es_None == SI)
+      equiv_set     — (Archivo, Unidad) que tienen al menos un grupo EQUIVALENCE
+    Ambos vacíos si los CSVs no existen.
+    """
+    impl_none_set = set()
+    if SIMBOLOS_IMPL_CSV.exists():
+        with open(SIMBOLOS_IMPL_CSV, encoding="utf-8-sig", errors="replace") as f:
+            for row in csv.DictReader(f):
+                if row.get("Es_None", "").strip() == "SI":
+                    clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
+                    impl_none_set.add(clave)
+
+    equiv_set = set()
+    if EQUIVALENCIAS_CSV.exists():
+        with open(EQUIVALENCIAS_CSV, encoding="utf-8-sig", errors="replace") as f:
+            for row in csv.DictReader(f):
+                clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
+                equiv_set.add(clave)
+
+    return impl_none_set, equiv_set
+
+
 def cargar_impacto():
     """Carga la matriz de impacto en un diccionario para búsqueda rápida."""
     impacto_map = {}
@@ -53,12 +100,16 @@ def cargar_impacto():
     return impacto_map
 
 
-def definir_estrategia(row, ivc, icm):
-    """Motor de Reglas (Idéntico a la versión anterior)."""
+def definir_estrategia(row, ivc, icm, estado_alcanz=""):
+    """Motor de Reglas."""
     fan_in = row["Fan_In"]
     tipo = row["Tipo"]
     pct_io = row["Pct_IO"]
     pct_declar = row["Pct_Declar"]
+
+    # Regla -1: Código muerto confirmado por análisis de alcanzabilidad
+    if estado_alcanz == "NO_ALCANZABLE":
+        return "ELIMINAR", "Código muerto confirmado por análisis de alcanzabilidad"
 
     # Regla 0: Código Muerto / Punto de Entrada sin detectar
     # MODULE y BLOCK DATA se excluyen: son USEd, no CALLed → Fan_In siempre 0 en análisis de llamadas
@@ -98,6 +149,14 @@ def main():
     print("Cargando matriz de impacto...")
     mapa_impacto = cargar_impacto()
 
+    # 1b. Fuentes opcionales
+    mapa_alcanz = cargar_alcanzabilidad()
+    impl_none_set, equiv_set = cargar_e4()
+    if mapa_alcanz:
+        print(f"  Alcanzabilidad cargada: {len(mapa_alcanz)} unidades")
+    if impl_none_set or equiv_set:
+        print(f"  E4: {len(impl_none_set)} con IMPLICIT NONE, {len(equiv_set)} con EQUIVALENCE")
+
     # 2. Procesar Densidad y Cruzar
     if not ARCHIVO_DENSIDAD.exists():
         print(f"ERROR: No se encuentra {ARCHIVO_DENSIDAD}")
@@ -136,12 +195,24 @@ def main():
             # C. Score Legacy (Tope 25% lineas -> 100 pts)
             score_legacy = clip(pct_legacy * 4, 100.0)
 
-            # D. ICM (15% Control + 45% Legacy + 20% Fan-Out + 20% Fan-In)
+            # D. ICM base (15% Control + 45% Legacy + 20% Fan-Out + 20% Fan-In)
             icm = (0.15 * pct_control) + (0.45 * score_legacy) + (0.20 * score_acople) + (0.20 * score_fanin)
-            icm = round(icm, 1)
 
-            # D. IVC
+            # D2. Penalización E4 (aditiva, max E4_PENALTY_MAX puntos)
+            clave = (archivo, unidad)
+            sin_impl_none = clave not in impl_none_set
+            tiene_equiv   = clave in equiv_set
+            e4_penalty = E4_PENALTY_MAX * (
+                W_E4_IMPL  * (1.0 if sin_impl_none else 0.0) +
+                W_E4_EQUIV * (1.0 if tiene_equiv   else 0.0)
+            )
+            icm = round(icm + e4_penalty, 1)
+
+            # E. IVC
             ivc = pct_calculo
+
+            # Estado de alcanzabilidad (vacío si CSV no disponible)
+            estado_alcanz = mapa_alcanz.get(clave, "")
 
             # Crear objeto fila enriquecido
             fila_procesada = {
@@ -153,14 +224,15 @@ def main():
                 "Pct_Calculo": pct_calculo,
                 "Pct_Control": pct_control,
                 "Pct_Legacy": pct_legacy,
-                "Pct_IO": pct_io,  # Necesario para reglas
-                "Pct_Declar": pct_declar,  # Necesario para reglas
+                "Pct_IO": pct_io,
+                "Pct_Declar": pct_declar,
                 "Fan_In": fan_in,
                 "Fan_Out": fan_out,
+                "Estado_Alcanz": estado_alcanz,
             }
 
             # Aplicar Reglas
-            estrategia, explicacion = definir_estrategia(fila_procesada, ivc, icm)
+            estrategia, explicacion = definir_estrategia(fila_procesada, ivc, icm, estado_alcanz)
 
             fila_procesada["Estrategia"] = estrategia
             fila_procesada["Explicacion"] = explicacion
@@ -188,6 +260,7 @@ def main():
         "Pct_Legacy",
         "Fan_In",
         "Fan_Out",
+        "Estado_Alcanz",
         "Explicacion",
     ]
 

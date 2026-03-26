@@ -16,6 +16,10 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 | :--- | :--- | :--- |
 | `INVENTARIO` | `RUTA_RESULTADOS / "reporte_inventario.csv"` | Input: unit inventory |
 | `DEPENDENCIAS` | `RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"` | Input: Fan-In / Fan-Out |
+| `SIMBOLOS_IMPL_CSV` | `RUTA_RESULTADOS / "simbolos_implicit.csv"` | Optional: IMPLICIT NONE coverage |
+| `EQUIVALENCIAS_CSV` | `RUTA_RESULTADOS / "equivalencias.csv"` | Optional: EQUIVALENCE aliasing |
+| `COMMON_USO_CSV` | `RUTA_RESULTADOS / "common_uso.csv"` | Optional: COMMON block usage |
+| `SIMBOLOS_VARS_CSV` | `RUTA_RESULTADOS / "simbolos_variables.csv"` | Optional: variable density per unit |
 | `OUT_MD` | `RUTA_RESULTADOS / "RESUMEN_PROYECTO.md"` | Output: Markdown summary |
 | `OUT_CSV` | `RUTA_RESULTADOS / "estadisticas_por_archivo.csv"` | Output: per-file statistics |
 
@@ -23,8 +27,15 @@ All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
 
 ## Inputs
 
+Required:
 - `<FORT_OUT>/reporte_inventario.csv`
 - `<FORT_OUT>/dep_03_matriz_impacto.csv`
+
+Optional (section 5 is generated only when at least one of these exists):
+- `<FORT_OUT>/simbolos_implicit.csv`
+- `<FORT_OUT>/equivalencias.csv`
+- `<FORT_OUT>/common_uso.csv`
+- `<FORT_OUT>/simbolos_variables.csv`
 
 ---
 
@@ -39,8 +50,11 @@ Markdown document with the following sections:
 3. **Top 10 Largest Files** — sorted by LOC, with unit count and types
 4. **Health Indicators (Legacy)** — units with legacy constructs and I/O,
    with frequency tables for each construct type
-5. **Critical Units (highest Fan-In)** — top 15 most reused units
-6. **Orchestrating Units (highest Fan-Out)** — top 15 units with most dependencies
+5. **Scope Health (E4)** — IMPLICIT NONE coverage, EQUIVALENCE and COMMON
+   block exposure, scope-clean unit count, top 5 by variable density.
+   Only generated when at least one E4 optional source is present.
+6. **Critical Units (highest Fan-In)** — top 15 most reused units
+7. **Orchestrating Units (highest Fan-Out)** — top 15 units with most dependencies
 
 ### `<FORT_OUT>/estadisticas_por_archivo.csv`
 
@@ -64,3 +78,9 @@ One row per source file.
   double-counting nested units.
 - The Legacy and I/O percentages in the Markdown report are computed as
   *units with at least one flag / total units*, not as raw flag counts.
+- **Scope-clean** units in section 5 are those with `IMPLICIT NONE`,
+  no EQUIVALENCE groups, and no COMMON blocks — the safest candidates
+  for direct migration.
+- The variable density top-5 counts only non-PARAMETER declarations
+  (`Es_Parametro != SI` in `simbolos_variables.csv`).
+- `estadisticas_por_archivo.csv` is not affected by the E4 optional sources.
