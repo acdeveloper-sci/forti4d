@@ -38,6 +38,7 @@ STEPS = [
     ("common_blocks",       "common_blocks.py",        "Detect COMMON block coupling"),
     ("simbolos",            "simbolos.py",             "Extract variable/parameter/implicit symbols per unit"),
     ("tipos_derivados",     "tipos_derivados.py",      "Extract derived TYPE definitions and their components"),
+    ("equivalencias",       "equivalencias.py",        "Detect EQUIVALENCE aliasing groups (union-find)"),
     ("alcanzabilidad",      "alcanzabilidad.py",       "Dead code detection from entry points"),
     ("sloc",                "sloc.py",                 "Precise SLOC count per unit"),
     ("clones",              "clones.py",               "Detect identical/similar/diverged duplicate units"),
