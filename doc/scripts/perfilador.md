@@ -5,7 +5,8 @@
 Classifies every logical statement in every source file and computes statement
 density profiles per unit. Also produces the `audit/` DEBUG files, which are
 the primary intermediate artifact consumed by `complejidad.py`,
-`common_blocks.py`, and — as a diagnostic tool — `analisis_bloques_v8.py`.
+`common_blocks.py`, `simbolos.py`, `tipos_derivados.py`, and — as a
+diagnostic tool — `analisis_bloques_v8.py`.
 
 ---
 
