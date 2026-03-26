@@ -32,6 +32,7 @@ SIMB_VARS   = RUTA_RESULTADOS / "simbolos_variables.csv"
 SIMB_FIRMAS = RUTA_RESULTADOS / "simbolos_firmas.csv"
 SIMB_IMPL   = RUTA_RESULTADOS / "simbolos_implicit.csv"
 TIPOS_DEF   = RUTA_RESULTADOS / "tipos_definicion.csv"
+EQUIV_CSV   = RUTA_RESULTADOS / "equivalencias.csv"
 
 SALIDA_CSV  = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
@@ -145,6 +146,7 @@ def cargar_fuentes():
         u = row.get("Unidad",  "").strip()
         return (a, u) if a and u else None
     tipos_multi = leer_csv_multi(TIPOS_DEF, clave_tipo)
+    equiv_multi = leer_csv_multi(EQUIV_CSV, clave_au)
 
     print(f"  inventario   : {len(inv_raw)} unidades")
     print(f"  sloc         : {len(sloc_data)} entradas")
@@ -156,9 +158,10 @@ def cargar_fuentes():
     print(f"  simbolos_vars: {sum(len(v) for v in vars_multi.values())} vars en {len(vars_multi)} unidades")
     print(f"  simbolos_firmas: {sum(len(v) for v in firmas_multi.values())} args en {len(firmas_multi)} unidades")
     print(f"  tipos_def    : {sum(len(v) for v in tipos_multi.values())} tipos en {len(tipos_multi)} unidades")
+    print(f"  equivalencias: {sum(len(v) for v in equiv_multi.values())} vars en {len(equiv_multi)} unidades")
 
     return (inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
-            common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi)
+            common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi)
 
 
 # =============================================================================
@@ -166,7 +169,7 @@ def cargar_fuentes():
 # =============================================================================
 
 def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_data,
-                    common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi):
+                    common_multi, vars_multi, firmas_multi, impl_multi, tipos_multi, equiv_multi):
     filas = []
 
     for (archivo, nombre), inv in inv_raw.items():
@@ -223,6 +226,9 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
         impl_none  = "SI" if any(r.get("Es_None") == "SI" for r in impl_rows) else (
                      "NO" if impl_rows else "")
         n_tipos    = len(tipos_multi.get(k, []))
+        equiv_rows   = equiv_multi.get(k, [])
+        tiene_equiv  = "SI" if equiv_rows else "NO"
+        n_grupos_equiv = len({r.get("ID_Grupo", "") for r in equiv_rows} - {""}) if equiv_rows else 0
 
         # ---- FLAGS del inventario ----
         legacy_flags = inv.get("Legacy", "").strip()
@@ -265,6 +271,8 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
             "N_Args_Formales":   n_args,
             "Implicit_None":     impl_none,
             "N_Tipos_Derivados": n_tipos,
+            "Tiene_Equiv":       tiene_equiv,
+            "N_Grupos_Equiv":    n_grupos_equiv,
             # Flags de auditoría
             "Legacy_Flags":   legacy_flags,
             "IO_Flags":       io_flags,
@@ -286,6 +294,7 @@ COLUMNAS = [
     "N_Common_Bloques", "Common_Bloques",
     "Estado", "Via_Entradas",
     "N_Vars_Locales", "N_Params", "N_Args_Formales", "Implicit_None", "N_Tipos_Derivados",
+    "Tiene_Equiv", "N_Grupos_Equiv",
     "Legacy_Flags", "IO_Flags",
 ]
 
