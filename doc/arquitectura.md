@@ -46,7 +46,7 @@ inventario.py
 
 #### `dependencias.py`
 - **Reads:** `reporte_inventario.csv` + Fortran source files
-- **Writes:** `dep_00_ambiguedades.csv`, `dep_01_datos_maestros.csv`, `dep_02_grafo_unidades.csv`, `dep_03_matriz_impacto.csv`, `dep_04_externos_huerfanos.csv`, `dep_05_dependencia_archivos.csv`
+- **Writes:** `dep_00_ambiguedades.csv`, `dep_01_datos_maestros.csv`, `dep_02_grafo_unidades.csv`, `dep_03_matriz_impacto.csv`, `dep_04_externos_huerfanos.csv`, `dep_05_dependencia_archivos.csv`, `dep_06_include_files.csv`
 - **Role:** Builds the call graph. Resolves CALL, USE, and function-call references between units. Computes Fan-In and Fan-Out per unit. Flags units defined in multiple files (ambiguities) and references with no known definition (orphans).
 
 #### `perfilador.py`
@@ -137,6 +137,11 @@ clones.py           ─── reads source files + reporte_inventario.csv
 - **Reads:** `reporte_consolidado.csv`, `reporte_clones.csv`, `reporte_estrategia_migracion.csv`
 - **Writes:** `reporte_priorizacion.csv`
 - **Role:** Computes a composite risk/effort score (0–100) per unit across five signals: cyclomatic complexity (30%), Fan-In criticality (30%), legacy density (20%), clone state (15%), and E4 scope risk — no IMPLICIT NONE + EQUIVALENCE aliasing (5%). Ranks units into CRITICA / ALTA / MEDIA / BAJA / DEAD_CODE tiers for migration planning.
+
+#### `reporte_html.py`
+- **Reads:** `reporte_priorizacion.csv`
+- **Writes:** `reporte.html`
+- **Role:** Generates a self-contained HTML report with priority summary cards and a filterable/sortable unit table. No external dependencies — stdlib only, inline CSS and JavaScript.
 
 ---
 

@@ -81,6 +81,7 @@ python3 pipeline.py --project ../myproject --output out/ --from complejidad --qu
 | `consolidar` | `consolidar.py` | Join all reports into `reporte_consolidado.csv` |
 | `grafo_visual` | `grafo_visual.py` | Generate call graph DOT files |
 | `priorizacion` | `priorizacion.py` | Compute composite risk score and rank units for migration |
+| `reporte_html` | `reporte_html.py` | Generate self-contained HTML report |
 
 ---
 
@@ -114,7 +115,7 @@ Terminal output includes per-step timing and a final summary table:
 === Fortran Static Analysis Pipeline ===
 Project : ../athys/mercedes/
 Output  : results/
-Steps   : 18
+Steps   : 19
 
 ────────────────────────────────────────────────────────────
 [1/13] inventario  —  Build unit inventory from source files
@@ -129,5 +130,5 @@ Summary  —  45.1s total
   ✓  dependencias            8.7s
   ...
 
-All 18 steps completed successfully.
+All 19 steps completed successfully.
 ```

@@ -44,7 +44,7 @@ See `doc/scripts/pipeline.md` for all flags and options.
 
 ## Pipeline
 
-The 18 steps in dependency order:
+The 19 steps in dependency order:
 
 ```
 inventario.py          →  reporte_inventario.csv
@@ -54,6 +54,7 @@ dependencias.py        →  dep_00_ambiguedades.csv
                           dep_03_matriz_impacto.csv
                           dep_04_externos_huerfanos.csv
                           dep_05_dependencia_archivos.csv
+                          dep_06_include_files.csv
 perfilador.py          →  reporte_densidad.csv
                           audit/<file>_DEBUG.csv  (one per source file)
 analisis_bloques_v8.py →  bloques/<file>_bloques.txt  (batch, one per source file)
@@ -78,6 +79,7 @@ clones.py              →  reporte_clones.csv
 consolidar.py          →  reporte_consolidado.csv
 grafo_visual.py        →  grafo_*.dot
 priorizacion.py        →  reporte_priorizacion.csv
+reporte_html.py        →  reporte.html
 ```
 
 > `perfilador.py` must run before `complejidad.py`, `common_blocks.py`,
@@ -101,6 +103,7 @@ priorizacion.py        →  reporte_priorizacion.csv
 | `dep_03_matriz_impacto.csv` | `dependencias.py` | Fan-In and Fan-Out per unit |
 | `dep_04_externos_huerfanos.csv` | `dependencias.py` | External references with no known definition in the corpus |
 | `dep_05_dependencia_archivos.csv` | `dependencias.py` | File-level dependency summary |
+| `dep_06_include_files.csv` | `dependencias.py` | INCLUDE file references with existence status |
 | `reporte_densidad.csv` | `perfilador.py` | Statement density profile per unit (% calculation, control, I/O, legacy) |
 | `audit/<file>_DEBUG.csv` | `perfilador.py` | Per-line statement classification for each source file |
 | `bloques/<file>_bloques.txt` | `analisis_bloques_v8.py` | Block topology per source file |
@@ -123,6 +126,7 @@ priorizacion.py        →  reporte_priorizacion.csv
 | `reporte_consolidado.csv` | `consolidar.py` | All metrics joined — one row per unit, 34 columns |
 | `grafo_*.dot` | `grafo_visual.py` | Graphviz call graph (full, simplified, or per entry point) |
 | `reporte_priorizacion.csv` | `priorizacion.py` | Units ranked by composite migration risk score |
+| `reporte.html` | `reporte_html.py` | Self-contained HTML report — filterable and sortable unit table |
 
 ---
 
