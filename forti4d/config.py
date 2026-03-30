@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 # Directorio con el código fuente Fortran a analizar
-CARPETA_CODIGO = Path(os.environ.get("FORT_SRC", "../athys/mercedes/"))
+CARPETA_CODIGO = Path(os.environ.get("FORT_SRC", "tests/fixtures/"))
 
 # Directorio raíz donde se escriben todos los archivos de salida
 RUTA_RESULTADOS = Path(os.environ.get("FORT_OUT", "results/"))
