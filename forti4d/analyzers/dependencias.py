@@ -644,7 +644,7 @@ def main():
         # --- Agregar a Grafo y Matriz Impacto (Solo internas resueltas) ---
         if dest_file and dest_file not in ("MULTIPLE_CANDIDATES", "EXTERNAL_OR_MISSING", "MISSING_FILE"):
             # Grafo
-            dest_files = "; ".join(sorted(set(inv["archivo"] for inv in inventory.get(dest_unit))))
+            dest_files = "; ".join(sorted(set(inv["archivo"] for inv in inventory.get(dest_unit, []))))
             graph_edges.add((item["source_unit"], item["source_type"], dest_unit, dest_type, dtype, dest_files))
             key = (item["source_unit"], dest_unit, item["source_type"], dest_type)
             edges_counter[key] += 1

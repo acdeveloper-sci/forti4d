@@ -28,8 +28,8 @@ COLS_COMPS = [
 # PATRONES DE EXTRACCIÓN (locales)
 # =============================================================================
 
-# Nombre de la definición: TYPE parametres_mercedes
-RE_TIPO_NOMBRE = re.compile(r"^\s*type\b\s+(\w+)", re.IGNORECASE)
+# Nombre de la definición: TYPE nombre  o  TYPE :: nombre  (F90)
+RE_TIPO_NOMBRE = re.compile(r"^\s*type\b\s*(?:::\s*)?(\w+)", re.IGNORECASE)
 
 # Cierre de bloque TYPE: END TYPE [nombre_opcional]
 RE_END_TYPE = re.compile(r"^\s*end\s*type\b", re.IGNORECASE)
