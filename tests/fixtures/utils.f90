@@ -1,5 +1,14 @@
 ! File: utils.f90
 ! Purpose: Base file for clone and ambiguity detection tests.
+
+! Structure: Named (generic) INTERFACE block — GENERIC_INTERFACE unit
+INTERFACE math_generic
+  SUBROUTINE math_util_a(x, y, res)
+    REAL, INTENT(IN) :: x, y
+    REAL, INTENT(OUT) :: res
+  END SUBROUTINE math_util_a
+END INTERFACE math_generic
+
 MODULE utils_mod
   IMPLICIT NONE
 

@@ -185,6 +185,7 @@ def auditar_archivo(ruta_archivo: Path) -> List[Dict]:
     implicit_main_active = False
     # Control para no crear unidades de definiciones que están dentro de INTERFACE
     dentro_de_interface = False
+    interface_activa    = None   # unidad INTERFACE/GENERIC_INTERFACE abierta
 
     for lline in logical_lines:
         if lline.is_comment:
@@ -199,29 +200,29 @@ def auditar_archivo(ruta_archivo: Path) -> List[Dict]:
         # 0.1. Chequeo de Estado: ¿Entramos o salimos de una INTERFACE?
         m_interface = RE_INTERFACE.match(text_safe)
         if m_interface:
-            # Si tiene nombre (Grupo 1), es una Interface Genérica.
-            # LA REGISTRAMOS como unidad, hija del módulo actual.
             nombre_interface = m_interface.group(1)
+            parent_name = stack[-1].nombre if stack else "GLOBAL"
 
             if nombre_interface:
-                parent_name = stack[-1].nombre if stack else "GLOBAL"
-                # Creamos la unidad "GENERIC_INTERFACE"
-                nueva_interface = UnidadDetectada("GENERIC_INTERFACE", nombre_interface, line_num, parent_name)
-                # Asumimos que la interface termina donde dice END INTERFACE,
-                # pero como vamos a ignorar el contenido, no la metemos al stack principal
-                # para que no interfiera con la lógica de cierre de subrutinas internas.
-                # Simplemente la guardamos y activamos el flag de ignorar.
+                # Interface genérica/nombrada
+                tipo_iface = "GENERIC_INTERFACE"
+            else:
+                # Interface anónima: declaración explícita de rutinas externas
+                tipo_iface = "INTERFACE"
+                nombre_interface = f"INTERFACE_{line_num}"
 
-                # OJO: Para simplificar, le ponemos linea_fin en la misma línea o '?'
-                # porque no vamos a trackear su END con el stack normal.
-                nueva_interface.linea_fin = line_num
-                unidades.append(nueva_interface)
+            nueva_interface = UnidadDetectada(tipo_iface, nombre_interface, line_num, parent_name)
+            interface_activa = nueva_interface
+            unidades.append(nueva_interface)
 
             dentro_de_interface = True
             continue  # Saltamos esta línea
 
         if RE_END_INTERFACE.match(text_safe):
             dentro_de_interface = False
+            if interface_activa is not None:
+                interface_activa.linea_fin = line_num
+                interface_activa = None
             continue  # Saltamos esta línea y volvemos a detectar normal
 
         # 0.2. Si estamos dentro de una interfaz, IGNORAMOS todo
