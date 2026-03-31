@@ -14,7 +14,7 @@ RESULTS_DIR = Path(__file__).parent / "results"
 
 @pytest.fixture(scope="module")
 def complejidad(pipeline_results):
-    return read_csv(pipeline_results / "reporte_complejidad.csv")
+    return read_csv(pipeline_results / "report_complexity.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ def test_process_mesh_cc(complejidad):
 
 def test_process_mesh_nivel(complejidad):
     rows = rows_by(complejidad, Unidad="PROCESS_MESH")
-    assert rows[0]["Interpretacion"].strip().upper() == "MEDIA"
+    assert rows[0]["Level"].strip().upper() == "MEDIUM"
 
 
 def test_validate_grid_cc(complejidad):
@@ -52,7 +52,7 @@ def test_validate_grid_cc(complejidad):
 
 def test_validate_grid_nivel(complejidad):
     rows = rows_by(complejidad, Unidad="VALIDATE_GRID")
-    assert rows[0]["Interpretacion"].strip().upper() == "BAJA"
+    assert rows[0]["Level"].strip().upper() == "LOW"
 
 
 def test_check_convergence_cc(complejidad):
@@ -75,12 +75,12 @@ def test_ghost_routine_cc(complejidad):
 
 def test_media_tier_count(complejidad):
     """Only process_mesh reaches MEDIA tier."""
-    media = [r for r in complejidad if r["Interpretacion"].strip().upper() == "MEDIA"]
+    media = [r for r in complejidad if r["Level"].strip().upper() == "MEDIUM"]
     assert len(media) == 1
     assert media[0]["Unidad"].strip().upper() == "PROCESS_MESH"
 
 
 def test_no_critica_tier(complejidad):
-    """No unit in fixtures should reach CRITICA (CC > 20)."""
-    critica = [r for r in complejidad if r["Interpretacion"].strip().upper() == "CRITICA"]
+    """No unit in fixtures should reach CRITICAL (CC > 20)."""
+    critica = [r for r in complejidad if r["Level"].strip().upper() == "CRITICAL"]
     assert len(critica) == 0

@@ -14,7 +14,7 @@ from tests.conftest import read_csv, rows_by
 
 @pytest.fixture(scope="module")
 def clones(pipeline_results):
-    return read_csv(pipeline_results / "reporte_clones.csv")
+    return read_csv(pipeline_results / "report_clones.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -27,17 +27,17 @@ def test_total_clone_pairs(clones):
 
 
 def test_identico_count(clones):
-    identicos = [r for r in clones if r["Estado"].strip().upper() == "IDENTICO"]
+    identicos = [r for r in clones if r["Status"].strip().upper() == "IDENTICAL"]
     assert len(identicos) == 2
 
 
 def test_similar_count(clones):
-    similares = [r for r in clones if r["Estado"].strip().upper() == "SIMILAR"]
+    similares = [r for r in clones if r["Status"].strip().upper() == "SIMILAR"]
     assert len(similares) == 3
 
 
 def test_divergido_count(clones):
-    divergidos = [r for r in clones if r["Estado"].strip().upper() == "DIVERGIDO"]
+    divergidos = [r for r in clones if r["Status"].strip().upper() == "DIVERGED"]
     assert len(divergidos) == 1
 
 
@@ -46,31 +46,31 @@ def test_divergido_count(clones):
 # ---------------------------------------------------------------------------
 
 def test_math_util_a_is_identico(clones):
-    rows = rows_by(clones, Nombre="MATH_UTIL_A", Estado="IDENTICO")
+    rows = rows_by(clones, Unit="MATH_UTIL_A", Status="IDENTICAL")
     assert len(rows) == 1
     assert float(rows[0]["Similitud_Pct"]) == 100.0
 
 
 def test_compute_load_is_identico(clones):
-    rows = rows_by(clones, Nombre="COMPUTE_LOAD", Estado="IDENTICO")
+    rows = rows_by(clones, Unit="COMPUTE_LOAD", Status="IDENTICAL")
     assert len(rows) == 1
     assert float(rows[0]["Similitud_Pct"]) == 100.0
 
 
 def test_math_util_b_is_similar(clones):
-    rows = rows_by(clones, Nombre="MATH_UTIL_B", Estado="SIMILAR")
+    rows = rows_by(clones, Unit="MATH_UTIL_B", Status="SIMILAR")
     assert len(rows) == 1
     assert float(rows[0]["Similitud_Pct"]) >= 75.0
 
 
 def test_calc_growth_is_similar(clones):
-    rows = rows_by(clones, Nombre="CALC_GROWTH", Estado="SIMILAR")
+    rows = rows_by(clones, Unit="CALC_GROWTH", Status="SIMILAR")
     assert len(rows) == 1
     assert float(rows[0]["Similitud_Pct"]) >= 75.0
 
 
 def test_calc_metrics_is_divergido(clones):
-    rows = rows_by(clones, Nombre="CALC_METRICS", Estado="DIVERGIDO")
+    rows = rows_by(clones, Unit="CALC_METRICS", Status="DIVERGED")
     assert len(rows) == 1
 
 

@@ -25,7 +25,7 @@ except ImportError as e:
 # =============================================================================
 from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
-ARCHIVO_SALIDA = RUTA_RESULTADOS / "reporte_inventario.csv"
+ARCHIVO_SALIDA = RUTA_RESULTADOS / "inventory_report.csv"
 
 # --- LISTAS DE AUDITORÍA (Reporte) ---
 LISTA_LEGACY = ["COMMON", "EQUIVALENCE", "PAUSE", "ENTRY", "ASSIGN", "GO TO", "COMPUTED GOTO", "ARITHMETIC IF"]
@@ -135,7 +135,7 @@ def cargar_inventario(ruta_csv=None):
     from pathlib import Path
 
     if ruta_csv is None:
-        ruta_csv = RUTA_RESULTADOS / "reporte_inventario.csv"
+        ruta_csv = RUTA_RESULTADOS / "inventory_report.csv"
 
     ruta_csv = Path(ruta_csv)
     datos_recuperados = []
@@ -151,14 +151,14 @@ def cargar_inventario(ruta_csv=None):
                 # Conversión de tipos crítica para el perfilador
                 try:
                     # Usamos las claves EXACTAS que definiste en la generación del CSV
-                    row["Linea_Inicio"] = int(row["Linea_Inicio"])
-                    row["Linea_Fin"] = int(row["Linea_Fin"])
-                    row["Lineas_Total"] = int(row["Lineas_Total"])
+                    row["Start_Line"] = int(row["Start_Line"])
+                    row["End_Line"] = int(row["End_Line"])
+                    row["Total_Lines"] = int(row["Total_Lines"])
                 except (ValueError, KeyError) as e:
                     # Si falla, mantenemos 0 para no romper la ejecución, pero avisamos si es debug
-                    row["Linea_Inicio"] = 0
-                    row["Linea_Fin"] = 0
-                    row["Lineas_Total"] = 0
+                    row["Start_Line"] = 0
+                    row["End_Line"] = 0
+                    row["Total_Lines"] = 0
 
                 datos_recuperados.append(row)
 
@@ -173,7 +173,7 @@ def auditar_archivo(ruta_archivo: Path) -> List[Dict]:
     try:
         logical_lines = read_logical_lines(str(ruta_archivo))
     except Exception as e:
-        return [{"Archivo": ruta_archivo.name, "Tipo": "ERROR", "Nombre": str(e)}]
+        return [{"Archivo": ruta_archivo.name, "Type": "ERROR", "Name": str(e)}]
 
     if not logical_lines:
         return []
@@ -363,12 +363,12 @@ def auditar_archivo(ruta_archivo: Path) -> List[Dict]:
         rows.append(
             {
                 "Archivo": ruta_archivo.name,
-                "Tipo": u.tipo,
-                "Nombre": u.nombre,
-                "Padre": u.padre,
-                "Linea_Inicio": u.linea_inicio,
-                "Linea_Fin": u.linea_fin,
-                "Lineas_Total": u.total_lineas,
+                "Type": u.tipo,
+                "Name": u.nombre,
+                "Parent": u.padre,
+                "Start_Line": u.linea_inicio,
+                "End_Line": u.linea_fin,
+                "Total_Lines": u.total_lineas,
                 "Legacy": ", ".join(sorted(u.flags_legacy)),
                 "IO": ", ".join(sorted(u.flags_io)),
                 "Custom": ", ".join(sorted(u.flags_custom)),
@@ -393,12 +393,12 @@ def main():
     if datos:
         campos = [
             "Archivo",
-            "Tipo",
-            "Nombre",
-            "Padre",
-            "Linea_Inicio",
-            "Linea_Fin",
-            "Lineas_Total",
+            "Type",
+            "Name",
+            "Parent",
+            "Start_Line",
+            "End_Line",
+            "Total_Lines",
             "Legacy",
             "IO",
             "Custom",

@@ -26,7 +26,7 @@ from forti4d.config import RUTA_RESULTADOS
 # CONFIGURACIÓN
 # =============================================================================
 CONSOLIDADO  = RUTA_RESULTADOS / "reporte_consolidado.csv"
-CLONES_CSV   = RUTA_RESULTADOS / "reporte_clones.csv"
+CLONES_CSV   = RUTA_RESULTADOS / "report_clones.csv"
 ESTRATEGIA   = RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"
 SALIDA_CSV   = RUTA_RESULTADOS / "reporte_priorizacion.csv"
 
@@ -45,9 +45,9 @@ W_E4_EQUIV  = 0.30   # has EQUIVALENCE aliasing
 
 # Clone penalty per worst state
 CLONE_PENALTY = {
-    "DIVERGIDO": 1.0,
+    "DIVERGED":  1.0,
     "SIMILAR":   0.5,
-    "IDENTICO":  0.25,
+    "IDENTICAL": 0.25,
 }
 
 # Priority thresholds (applied to score 0-100).
@@ -124,7 +124,7 @@ def cargar_peor_estado_clon() -> dict:
     Returns dict: (archivo, unidad_upper) → worst clone Estado for that unit.
     A unit appears in clones as Archivo_A or Archivo_B.
     """
-    _rank = {"DIVERGIDO": 3, "SIMILAR": 2, "IDENTICO": 1}
+    _rank = {"DIVERGED": 3, "SIMILAR": 2, "IDENTICAL": 1}
     peor = {}
 
     if not CLONES_CSV.exists():
@@ -132,8 +132,8 @@ def cargar_peor_estado_clon() -> dict:
 
     with open(CLONES_CSV, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            nombre = row.get("Nombre", "").strip().upper()
-            estado = row.get("Estado", "").strip()
+            nombre = row.get("Unit", "").strip().upper()
+            estado = row.get("Status", "").strip()
             arch_a = row.get("Archivo_A", "").strip()
             arch_b = row.get("Archivo_B", "").strip()
 
@@ -156,7 +156,7 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
     # Using percentile instead of max prevents a single outlier (e.g. an
     # IMPLICIT-MAIN with CC in the thousands) from compressing the entire scale.
     # Values above the reference are capped at 1.0.
-    vivos = [r for r in filas if r.get("Estado", "") != "NO_ALCANZABLE"]
+    vivos = [r for r in filas if r.get("Status", "") != "UNREACHABLE"]
 
     ref_cc    = percentil([safe_float(r.get("CC"))     for r in vivos], 95) or 1.0
     ref_fanin = percentil([safe_float(r.get("Fan_In")) for r in vivos], 95) or 1.0
@@ -165,7 +165,7 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
     for row in filas:
         archivo = row.get("Archivo", "").strip()
         unidad  = row.get("Unidad",  "").strip()
-        estado  = row.get("Estado",  "").strip()
+        estado  = row.get("Status",  "").strip()
 
         cc      = safe_float(row.get("CC"))
         fan_in  = safe_float(row.get("Fan_In"))
@@ -181,8 +181,8 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
         s_clone = CLONE_PENALTY.get(estado_clon, 0.0)
 
         # E4 Risk component
-        sin_impl_none = row.get("Implicit_None", "") != "SI"
-        tiene_equiv   = row.get("Tiene_Equiv",   "") == "SI"
+        sin_impl_none = row.get("Implicit_None", "") != "YES"
+        tiene_equiv   = row.get("Tiene_Equiv",   "") == "YES"
         s_e4 = min(W_E4_IMPL * (1.0 if sin_impl_none else 0.0) +
                    W_E4_EQUIV * (1.0 if tiene_equiv   else 0.0), 1.0)
 
@@ -191,7 +191,7 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
                  W_LEGACY * s_legacy + W_CLONE * s_clone +
                  W_E4 * s_e4) * 100
 
-        if estado == "NO_ALCANZABLE":
+        if estado == "UNREACHABLE":
             prioridad = "DEAD_CODE"
         else:
             prioridad = clasificar_prioridad(score)
@@ -203,12 +203,12 @@ def calcular_scores(filas: list, clones: dict, estrategia: dict) -> list:
             "Score":        round(score, 1),
             "Archivo":      archivo,
             "Unidad":       unidad,
-            "Tipo":         row.get("Tipo", ""),
+            "Type":         row.get("Type", ""),
             "CC":           row.get("CC", ""),
             "Fan_In":       row.get("Fan_In", ""),
             "Pct_Legacy":   row.get("Pct_Legacy", ""),
-            "Estado_Alcanz":estado,
-            "Estado_Clon":  estado_clon,
+            "Reachability_Status":estado,
+            "Clone_Status":  estado_clon,
             "Estrategia":   estrategia_unit,
             "Implicit_None": row.get("Implicit_None", ""),
             "Tiene_Equiv":   row.get("Tiene_Equiv", ""),
@@ -242,9 +242,9 @@ def main():
 
     campos = [
         "Prioridad", "Score",
-        "Archivo", "Unidad", "Tipo",
+        "Archivo", "Unidad", "Type",
         "CC", "Fan_In", "Pct_Legacy",
-        "Estado_Alcanz", "Estado_Clon", "Estrategia",
+        "Reachability_Status", "Clone_Status", "Estrategia",
         "Implicit_None", "Tiene_Equiv",
         "Score_CC", "Score_FanIn", "Score_Legacy", "Score_Clon", "Score_E4",
     ]

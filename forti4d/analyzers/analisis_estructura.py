@@ -7,8 +7,8 @@ from forti4d.config import RUTA_RESULTADOS
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-ARCHIVO_IMPACTO    = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
-ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "reporte_inventario.csv"
+ARCHIVO_IMPACTO    = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
+ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "inventory_report.csv"
 ARCHIVO_SALIDA     = RUTA_RESULTADOS / "analisis_nodos_criticos.csv"
 
 # ¿Cuántas llamadas entrantes convierten a una unidad en "CRÍTICA"?
@@ -40,8 +40,8 @@ def cargar_matriz():
 
             data_por_archivo[archivo].append(
                 {
-                    "Unidad": row.get("Unidad", "UNKNOWN"),
-                    "Tipo": row.get("Tipo", "UNKNOWN").upper(),
+                    "Unidad": row.get("Unit", "UNKNOWN"),
+                    "Type": row.get("Type", "UNKNOWN").upper(),
                     "Fan_In": fan_in,
                     "Fan_Out": fan_out,
                 }
@@ -67,7 +67,7 @@ def cargar_archivos_inventario():
             arch = row.get("Archivo", "").strip()
             if arch:
                 archivos_conocidos.add(arch)
-                if row.get("Tipo", "").upper() == "IMPLICIT-MAIN":
+                if row.get("Type", "").upper() == "IMPLICIT-MAIN":
                     archivos_con_implicit_main.add(arch)
 
     return archivos_conocidos, archivos_con_implicit_main
@@ -109,7 +109,7 @@ def clasificar_archivo(nombre_archivo, unidades, tiene_implicit_main):
             fan_out_max = fo
             unidad_max_out = u["Unidad"]
 
-        tipo_str = u["Tipo"]
+        tipo_str = u["Type"]
         if "PROGRAM" in tipo_str or "IMPLICIT-MAIN" in tipo_str:
             tiene_main = True
 

@@ -10,7 +10,7 @@ from forti4d.config import RUTA_RESULTADOS
 # CONFIGURACIÓN
 # =============================================================================
 RUTA_AUDIT = RUTA_RESULTADOS / "audit"
-SALIDA_CSV = RUTA_RESULTADOS / "reporte_complejidad.csv"
+SALIDA_CSV = RUTA_RESULTADOS / "report_complexity.csv"
 
 
 # =============================================================================
@@ -63,12 +63,12 @@ def contar_punto_decision(kind: str, contenido: str) -> int:
 
 def interpretar_cc(cc: int) -> str:
     if cc <= 10:
-        return "BAJA"
+        return "LOW"
     if cc <= 20:
-        return "MEDIA"
+        return "MEDIUM"
     if cc <= 50:
-        return "ALTA"
-    return "CRITICA"
+        return "HIGH"
+    return "CRITICAL"
 
 
 # =============================================================================
@@ -98,11 +98,11 @@ def analizar_complejidad():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades_archivo[archivo].append(u)
 
     datos_salida = []
@@ -118,7 +118,7 @@ def analizar_complejidad():
             continue
 
         unidades_en_archivo = mapa_unidades_archivo[nombre_archivo]
-        unidades_en_archivo.sort(key=lambda u: u["Linea_Inicio"])
+        unidades_en_archivo.sort(key=lambda u: u["Start_Line"])
 
         # Acumuladores: cada unidad parte con CC base = 1
         puntos = defaultdict(int)
@@ -140,27 +140,27 @@ def analizar_complejidad():
                 # Scope resolution: unidad más interna que contenga n_linea
                 candidatos = [
                     u for u in unidades_en_archivo
-                    if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
+                    if u["Start_Line"] <= n_linea <= u["End_Line"]
                 ]
                 if not candidatos:
                     continue
-                scope = max(candidatos, key=lambda u: u["Linea_Inicio"])["Nombre"]
+                scope = max(candidatos, key=lambda u: u["Start_Line"])["Name"]
 
                 puntos[scope] += delta
 
         # Construir filas de salida para cada unidad del archivo
         for u in unidades_en_archivo:
-            nombre = u["Nombre"]
+            nombre = u["Name"]
             cc     = 1 + puntos[nombre]
             datos_salida.append({
                 "Archivo":      nombre_archivo,
                 "Unidad":       nombre,
-                "Tipo":         u.get("Tipo", "UNKNOWN"),
+                "Type":         u.get("Type", "UNKNOWN"),
                 "CC":           cc,
-                "Interpretacion": interpretar_cc(cc),
-                "Linea_Inicio": u["Linea_Inicio"],
-                "Linea_Fin":    u["Linea_Fin"],
-                "Lineas_Total": u.get("Lineas_Total", 0),
+                "Level": interpretar_cc(cc),
+                "Start_Line":   u["Start_Line"],
+                "End_Line":     u["End_Line"],
+                "Total_Lines":  u.get("Total_Lines", 0),
             })
 
     # 3. Ordenar por CC descendente
@@ -168,8 +168,8 @@ def analizar_complejidad():
 
     # 4. Exportar
     columnas = [
-        "Archivo", "Unidad", "Tipo", "CC", "Interpretacion",
-        "Linea_Inicio", "Linea_Fin", "Lineas_Total",
+        "Archivo", "Unidad", "Type", "CC", "Level",
+        "Start_Line", "End_Line", "Total_Lines",
     ]
     try:
         with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
@@ -183,18 +183,18 @@ def analizar_complejidad():
 
     # 5. Resumen en consola
     from collections import Counter
-    conteo   = Counter(r["Interpretacion"] for r in datos_salida)
+    conteo   = Counter(r["Level"] for r in datos_salida)
     cc_vals  = [r["CC"] for r in datos_salida]
 
-    print(f"\nDistribución ({len(datos_salida)} unidades):")
-    for nivel in ("BAJA", "MEDIA", "ALTA", "CRITICA"):
+    print(f"\nDistribution ({len(datos_salida)} units):")
+    for nivel in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         n = conteo.get(nivel, 0)
         if n:
             print(f"  {nivel:8}: {n:4}")
 
     print(f"\nTop 10 unidades más complejas:")
     for r in datos_salida[:10]:
-        print(f"  CC={r['CC']:5}  {r['Interpretacion']:8}  "
+        print(f"  CC={r['CC']:5}  {r['Level']:8}  "
               f"{r['Archivo']:25} {r['Unidad']}")
 
 

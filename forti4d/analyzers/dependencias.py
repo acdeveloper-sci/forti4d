@@ -25,15 +25,15 @@ except ImportError as e:
 # =============================================================================
 from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 
-ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "reporte_inventario.csv"
+ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "inventory_report.csv"
 
 # Archivos de Salida
-OUT_AMBIGUOS  = RUTA_RESULTADOS / "dep_00_ambiguedades.csv"
-OUT_MAESTRO   = RUTA_RESULTADOS / "dep_01_datos_maestros.csv"
-OUT_GRAFO     = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
-OUT_IMPACTO   = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
-OUT_HUERFANOS = RUTA_RESULTADOS / "dep_04_externos_huerfanos.csv"
-OUT_ARCHIVOS  = RUTA_RESULTADOS / "dep_05_dependencia_archivos.csv"
+OUT_AMBIGUOS  = RUTA_RESULTADOS / "dep_00_ambiguities.csv"
+OUT_MAESTRO   = RUTA_RESULTADOS / "dep_01_master_data.csv"
+OUT_GRAFO     = RUTA_RESULTADOS / "dep_02_unit_graph.csv"
+OUT_IMPACTO   = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
+OUT_HUERFANOS = RUTA_RESULTADOS / "dep_04_external_orphans.csv"
+OUT_ARCHIVOS  = RUTA_RESULTADOS / "dep_05_file_dependencies.csv"
 OUT_INCLUDES  = RUTA_RESULTADOS / "dep_06_include_files.csv"
 
 # Jerarquía de Naturaleza (Menor índice = Más fuerte)
@@ -267,11 +267,11 @@ def cargar_inventario(report_ambiguos=False) -> Tuple[Dict, Dict]:
     with open(ARCHIVO_INVENTARIO, "r", encoding="utf-8") as f:
         reader_csv = csv.DictReader(f)
         for row in reader_csv:
-            nombre = row.get("Nombre", "").strip().upper()
+            nombre = row.get("Name", "").strip().upper()
             archivo = row.get("Archivo", "").strip()
-            tipo = row.get("Tipo", "").strip().upper()
+            tipo = row.get("Type", "").strip().upper()
             # LEER EL PADRE (Si no existe columna, asume GLOBAL por compatibilidad)
-            padre = row.get("Padre", "GLOBAL").strip().upper()
+            padre = row.get("Parent", "GLOBAL").strip().upper()
 
             # Ajuste de nombre para Implicit Main en el Inventario (si aplica)
             # Pero normalmente el inventario ya trae "IMPLICIT-MAIN".
@@ -309,17 +309,17 @@ def cargar_inventario(report_ambiguos=False) -> Tuple[Dict, Dict]:
             archivos_list = [d["archivo"] for d in occurrences]
             ambiguos_rows.append(
                 {
-                    "Nombre_Unidad": nombre,
-                    "Tipo": tipo_reporte,
-                    "Cantidad_Apariciones": len(occurrences),
-                    "Lista_Archivos": "; ".join(sorted(set(archivos_list))),
+                    "Unit_Name": nombre,
+                    "Type": tipo_reporte,
+                    "Count": len(occurrences),
+                    "File_List": "; ".join(sorted(set(archivos_list))),
                 }
             )
 
     # Guardar reporte de ambigüedades
     if ambiguos_rows and report_ambiguos:
         with open(OUT_AMBIGUOS, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Nombre_Unidad", "Tipo", "Cantidad_Apariciones", "Lista_Archivos"])
+            w = csv.DictWriter(f, fieldnames=["Unit_Name", "Type", "Count", "File_List"])
             w.writeheader()
             w.writerows(ambiguos_rows)
         print(f"  -> Detectadas {len(ambiguos_rows)} unidades ambiguas (ver {OUT_AMBIGUOS})")
@@ -685,13 +685,13 @@ def main():
             w = csv.writer(f)
             w.writerow(
                 [
-                    "Unidad_Origen",
-                    "Tipo_Origen",
-                    "Unidad_Destino",
-                    "Tipo_Destino",
-                    "Tipo_Dep",
-                    "Archivo_Destino",
-                    "Peso",
+                    "Source_Unit",
+                    "Source_Type",
+                    "Target_Unit",
+                    "Target_Type",
+                    "Dep_Type",
+                    "Target_File",
+                    "Weight",
                 ]
             )
             for row in sorted(list(graph_edges)):
@@ -741,8 +741,8 @@ def main():
 
             rows_impact.append(
                 {
-                    "Unidad": u,
-                    "Tipo": tipo_reporte,
+                    "Unit": u,
+                    "Type": tipo_reporte,
                     "Archivo": archivos_reporte,
                     "Fan_Out": impact_fan_out.get(u, 0),
                     "Fan_In": impact_fan_in.get(u, 0),
@@ -750,7 +750,7 @@ def main():
             )
 
         with open(OUT_IMPACTO, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Unidad", "Tipo", "Archivo", "Fan_Out", "Fan_In"])
+            w = csv.DictWriter(f, fieldnames=["Unit", "Type", "Archivo", "Fan_Out", "Fan_In"])
             w.writeheader()
             w.writerows(rows_impact)
         print(f"Generado: {OUT_IMPACTO}")
@@ -759,9 +759,9 @@ def main():
     if huerfanos_set:
         with open(OUT_HUERFANOS, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["Unidad_Destino", "Tipo_Dependencia", "Estado"])
+            w.writerow(["Target_Unit", "Dep_Type", "Status"])
             for u, t in sorted(list(huerfanos_set)):
-                w.writerow([u, t, "EXTERNO_O_LIBRERIA"])
+                w.writerow([u, t, "EXTERNAL_OR_LIBRARY"])
         print(f"Generado: {OUT_HUERFANOS}")
 
     # E. Dependencia de Archivos
@@ -800,17 +800,17 @@ def main():
             if key in seen_includes:
                 continue
             seen_includes.add(key)
-            estado = "PRESENTE" if (CARPETA_CODIGO / target).exists() else "FALTANTE"
+            estado = "PRESENT" if (CARPETA_CODIGO / target).exists() else "MISSING"
             include_rows.append({
-                "Archivo_Origen":   item["source_file"],
-                "Unidad_Origen":    item["source_unit"],
-                "Archivo_Incluido": target,
-                "Estado":           estado,
+                "Source_File":    item["source_file"],
+                "Source_Unit":    item["source_unit"],
+                "Included_File":  target,
+                "Status":         estado,
             })
-        include_rows.sort(key=lambda r: (r["Archivo_Origen"], r["Unidad_Origen"]))
+        include_rows.sort(key=lambda r: (r["Source_File"], r["Source_Unit"]))
 
         with open(OUT_INCLUDES, "w", newline="", encoding="utf-8") as f:
-            keys = ["Archivo_Origen", "Unidad_Origen", "Archivo_Incluido", "Estado"]
+            keys = ["Source_File", "Source_Unit", "Included_File", "Status"]
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(include_rows)

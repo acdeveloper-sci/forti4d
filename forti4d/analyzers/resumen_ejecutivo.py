@@ -6,14 +6,14 @@ from statistics import mean, median
 from forti4d.config import RUTA_RESULTADOS
 
 # Archivos de entrada
-INVENTARIO   = RUTA_RESULTADOS / "reporte_inventario.csv"
-DEPENDENCIAS = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+INVENTARIO   = RUTA_RESULTADOS / "inventory_report.csv"
+DEPENDENCIAS = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
 
 # Fuentes opcionales E4
-SIMBOLOS_IMPL_CSV = RUTA_RESULTADOS / "simbolos_implicit.csv"
-EQUIVALENCIAS_CSV = RUTA_RESULTADOS / "equivalencias.csv"
+SIMBOLOS_IMPL_CSV = RUTA_RESULTADOS / "symbol_implicit.csv"
+EQUIVALENCIAS_CSV = RUTA_RESULTADOS / "equivalences.csv"
 COMMON_USO_CSV    = RUTA_RESULTADOS / "common_uso.csv"
-SIMBOLOS_VARS_CSV = RUTA_RESULTADOS / "simbolos_variables.csv"
+SIMBOLOS_VARS_CSV = RUTA_RESULTADOS / "symbol_variables.csv"
 
 # Salidas
 OUT_MD  = RUTA_RESULTADOS / "RESUMEN_PROYECTO.md"
@@ -33,12 +33,12 @@ def cargar_datos():
             # Convertir números con seguridad
             try:
                 # Si viene vacío o con '?', ponemos 0
-                val = row.get("Lineas_Total", "0").strip()
+                val = row.get("Total_Lines", "0").strip()
                 if not val.isdigit():
                     val = "0"
-                row["Lineas_Total"] = int(val)
+                row["Total_Lines"] = int(val)
             except ValueError:
-                row["Lineas_Total"] = 0
+                row["Total_Lines"] = 0
             inv_rows.append(row)
 
     dep_rows = []
@@ -73,7 +73,7 @@ def cargar_scope_health():
     if SIMBOLOS_IMPL_CSV.exists():
         with open(SIMBOLOS_IMPL_CSV, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
-                if row.get("Es_None", "").strip() == "SI":
+                if row.get("Is_None", "").strip() == "YES":
                     impl_none_set.add((row.get("Archivo", "").strip(), row.get("Unidad", "").strip()))
 
     equiv_set = set()
@@ -92,7 +92,7 @@ def cargar_scope_health():
     if SIMBOLOS_VARS_CSV.exists():
         with open(SIMBOLOS_VARS_CSV, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
-                if row.get("Es_Parametro", "").strip() != "SI":
+                if row.get("Is_Parameter", "").strip() != "YES":
                     clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
                     vars_count[clave] += 1
 
@@ -108,7 +108,7 @@ def calcular_scope_stats(inv_rows, impl_none_set, equiv_set, common_set, vars_co
         return None
 
     total = len(inv_rows)
-    unidades = [(r["Archivo"], r["Nombre"] if "Nombre" in r else r.get("Unidad", "")) for r in inv_rows]
+    unidades = [(r["Archivo"], r["Name"] if "Name" in r else r.get("Unidad", "")) for r in inv_rows]
 
     n_impl_none = sum(1 for u in unidades if u in impl_none_set)
     n_equiv     = sum(1 for u in unidades if u in equiv_set)
@@ -134,7 +134,7 @@ def calcular_scope_stats(inv_rows, impl_none_set, equiv_set, common_set, vars_co
 def calcular_resumen(inv_rows, dep_rows):
     stats = {
         "total_archivos": 0,
-        "total_lineas": sum(r["Lineas_Total"] for r in inv_rows if r.get("Padre", "GLOBAL") == "GLOBAL"),
+        "total_lineas": sum(r["Total_Lines"] for r in inv_rows if r.get("Parent", "GLOBAL") == "GLOBAL"),
         "total_unidades": len(inv_rows),
         "unidades_por_tipo": Counter(),
         "archivos_map": defaultdict(
@@ -154,16 +154,16 @@ def calcular_resumen(inv_rows, dep_rows):
 
     for r in inv_rows:
         arch = r["Archivo"]
-        tipo = r["Tipo"]
-        lineas = r["Lineas_Total"]
+        tipo = r["Type"]
+        lineas = r["Total_Lines"]
 
         archivos_unicos.add(arch)
-        stats["unidades_por_tipo"][r["Tipo"]] += 1
+        stats["unidades_por_tipo"][r["Type"]] += 1
 
         # Stats por archivo - LOC solo en unidades raíz para evitar doble conteo
         # (unidades anidadas comparten el rango de líneas de su padre)
         stats["archivos_map"][arch]["lineas_p"] = lineas
-        if r.get("Padre", "GLOBAL") == "GLOBAL":
+        if r.get("Parent", "GLOBAL") == "GLOBAL":
             stats["archivos_map"][arch]["lineas"] += lineas
         stats["archivos_map"][arch]["unidades"] += 1
         stats["archivos_map"][arch]["tipos"].add(tipo)
@@ -304,7 +304,7 @@ def generar_reporte_markdown(stats, scope_stats=None):
             f.write("| Unidad | Tipo | Archivo | Es llamada por (veces) |\n")
             f.write("| :--- | :--- | :--- | :---: |\n")
             for d in top_usados:
-                f.write(f"| {d['Unidad']} | {d.get('Tipo','?')} | {d.get('Archivo','?')} | {d.get('Fan_In',0)} |\n")
+                f.write(f"| {d['Unit']} | {d.get('Type','?')} | {d.get('Archivo','?')} | {d.get('Fan_In',0)} |\n")
             f.write("\n")
 
         top_complejos = stats["top_complejos"]
@@ -317,7 +317,7 @@ def generar_reporte_markdown(stats, scope_stats=None):
             f.write("| Unidad | Tipo | Archivo | Llama a (nº dependencias) |\n")
             f.write("| :--- | :--- | :--- | :---: |\n")
             for d in top_complejos:
-                f.write(f"| {d['Unidad']} | {d.get('Tipo','?')} | {d.get('Archivo','?')} | {d.get('Fan_Out',0)} |\n")
+                f.write(f"| {d['Unit']} | {d.get('Type','?')} | {d.get('Archivo','?')} | {d.get('Fan_Out',0)} |\n")
             f.write("\n")
 
     print(f"Generado reporte ejecutivo: {OUT_MD}")

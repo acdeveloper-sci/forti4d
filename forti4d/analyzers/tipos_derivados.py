@@ -10,17 +10,17 @@ from forti4d.config import RUTA_RESULTADOS
 # CONFIGURACIÓN
 # =============================================================================
 RUTA_AUDIT     = RUTA_RESULTADOS / "audit"
-SALIDA_TIPOS   = RUTA_RESULTADOS / "tipos_definicion.csv"
-SALIDA_COMPS   = RUTA_RESULTADOS / "tipos_componentes.csv"
+SALIDA_TIPOS   = RUTA_RESULTADOS / "type_definitions.csv"
+SALIDA_COMPS   = RUTA_RESULTADOS / "type_components.csv"
 
 COLS_TIPOS = [
     "Archivo", "Unidad", "Tipo_Unidad",
-    "Linea_Inicio", "Linea_Fin", "Nombre_Tipo", "N_Componentes",
+    "Linea_Inicio", "Linea_Fin", "Type_Name", "N_Components",
 ]
 COLS_COMPS = [
-    "Archivo", "Nombre_Tipo",
-    "Linea", "Posicion", "Nombre_Comp",
-    "Tipo_Fortran", "Kind_Param", "Dimension", "Atributos",
+    "Archivo", "Type_Name",
+    "Linea", "Position", "Comp_Name",
+    "Fortran_Type", "Kind_Param", "Dimension", "Attributes",
 ]
 
 
@@ -195,13 +195,13 @@ def _parsear_entry(entry: str, tipo: str, kind: str, dim: str, attrs: list,
         return {}
 
     return {
-        "Linea":       n_linea,
-        "Posicion":    posicion,
-        "Nombre_Comp": nombre.upper(),
-        "Tipo_Fortran": tipo,
-        "Kind_Param":  kind,
-        "Dimension":   dim_local,
-        "Atributos":   "|".join(attrs) if attrs else "",
+        "Linea":        n_linea,
+        "Position":     posicion,
+        "Comp_Name":    nombre.upper(),
+        "Fortran_Type": tipo,
+        "Kind_Param":   kind,
+        "Dimension":    dim_local,
+        "Attributes":   "|".join(attrs) if attrs else "",
     }
 
 
@@ -213,12 +213,12 @@ def resolver_scope(n_linea: int, unidades_en_archivo: list) -> tuple:
     """Retorna (nombre_unidad, tipo_unidad) para n_linea."""
     candidatos = [
         u for u in unidades_en_archivo
-        if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
+        if u["Start_Line"] <= n_linea <= u["End_Line"]
     ]
     if not candidatos:
         return "GLOBAL", "FILE_SCOPE"
-    u = max(candidatos, key=lambda u: u["Linea_Inicio"])
-    return u["Nombre"], u.get("Tipo", "UNKNOWN")
+    u = max(candidatos, key=lambda u: u["Start_Line"])
+    return u["Name"], u.get("Type", "UNKNOWN")
 
 
 # =============================================================================
@@ -248,11 +248,11 @@ def extraer_tipos():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades[archivo].append(u)
 
     filas_tipos = []
@@ -266,7 +266,7 @@ def extraer_tipos():
             continue
 
         unidades_en_archivo = sorted(
-            mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"]
+            mapa_unidades[nombre_archivo], key=lambda u: u["Start_Line"]
         )
 
         tipo_activo = None   # dict mientras estamos dentro de un TYPE body
@@ -310,13 +310,13 @@ def extraer_tipos():
                             "Tipo_Unidad":  tipo_activo["Tipo_Unidad"],
                             "Linea_Inicio": tipo_activo["Linea_Inicio"],
                             "Linea_Fin":    tipo_activo["Linea_Fin"],
-                            "Nombre_Tipo":  tipo_activo["Nombre_Tipo"],
-                            "N_Componentes": len(comps),
+                            "Type_Name":    tipo_activo["Nombre_Tipo"],
+                            "N_Components": len(comps),
                         })
                         for comp in comps:
                             filas_comps.append({
-                                "Archivo":     nombre_archivo,
-                                "Nombre_Tipo": tipo_activo["Nombre_Tipo"],
+                                "Archivo":   nombre_archivo,
+                                "Type_Name": tipo_activo["Nombre_Tipo"],
                                 **comp,
                             })
                         tipo_activo = None

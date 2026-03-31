@@ -27,7 +27,7 @@ from pathlib import Path
 # =============================================================================
 from forti4d.config import RUTA_RESULTADOS
 
-GRAFO_CSV   = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
+GRAFO_CSV   = RUTA_RESULTADOS / "dep_02_unit_graph.csv"
 CONSOLIDADO = RUTA_RESULTADOS / "reporte_consolidado.csv"
 
 # Colores base
@@ -112,9 +112,9 @@ def construir_grafo_amigable(raw_edges: list, meta: dict) -> list:
     """
     resultado = []
     for e in raw_edges:
-        orig = nombre_amigable(e["Unidad_Origen"],  meta)
-        dest = nombre_amigable(e["Unidad_Destino"], meta)
-        resultado.append((orig, dest, e["Tipo_Dep"]))
+        orig = nombre_amigable(e["Source_Unit"], meta)
+        dest = nombre_amigable(e["Target_Unit"], meta)
+        resultado.append((orig, dest, e["Dep_Type"]))
     return resultado
 
 
@@ -127,7 +127,7 @@ def entry_points_disponibles(meta: dict) -> list:
     return sorted(
         row["Unidad"]
         for row in meta.values()
-        if row.get("Estado") == "ENTRADA"
+        if row.get("Status") == "ENTRY_POINT"
     )
 
 
@@ -193,7 +193,7 @@ def color_nodo(nombre_inv: str, meta: dict,
     """
     eps_que_alcanzan = nodo_eps.get(nombre_inv, set()) & set(entry_names_sel)
     row   = meta.get(nombre_inv.upper(), {})
-    tipo  = row.get("Tipo", "")
+    tipo  = row.get("Type", "")
     es_ep = nombre_inv in entry_names_sel
 
     if es_ep:
@@ -292,7 +292,7 @@ def generar_dot(edges_amigables: list, meta: dict,
         lines.append(f'    label="{label_arch}" fontsize=8 style=rounded color="#CCCCCC";')
         for n in nodos:
             row    = meta.get(n.upper(), {})
-            tipo   = row.get("Tipo", "")
+            tipo   = row.get("Type", "")
             cc     = row.get("CC", "")
             fan_in = row.get("Fan_In", "")
             shape  = SHAPE.get(tipo, SHAPE_DEFAULT)
@@ -360,7 +360,7 @@ def main():
         print("Entry points disponibles:")
         for ep in eps_disponibles:
             row = meta.get(ep.upper(), {})
-            tipo = row.get("Tipo", "")
+            tipo = row.get("Type", "")
             arch = row.get("Archivo", "")
             print(f"  {ep:25}  [{tipo}]  {arch}")
         return
@@ -422,9 +422,9 @@ def main():
     # Modo completo: sin --entry
     # -------------------------------------------------------------------------
     else:
-        n_call = sum(1 for e in raw_edges if e["Tipo_Dep"] == "CALL")
-        n_func = sum(1 for e in raw_edges if e["Tipo_Dep"] == "FUNC_CALL")
-        n_use  = sum(1 for e in raw_edges if e["Tipo_Dep"] == "USE")
+        n_call = sum(1 for e in raw_edges if e["Dep_Type"] == "CALL")
+        n_func = sum(1 for e in raw_edges if e["Dep_Type"] == "FUNC_CALL")
+        n_use  = sum(1 for e in raw_edges if e["Dep_Type"] == "USE")
         print(f"Grafo: {len(meta)} nodos  |  {n_call} CALL  {n_func} FUNC_CALL  {n_use} USE")
 
         nodo_eps   = calcular_alcance(eps_disponibles, edges_am)

@@ -8,8 +8,8 @@ from forti4d.config import RUTA_RESULTADOS
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-GRAFO_CSV  = RUTA_RESULTADOS / "dep_02_grafo_unidades.csv"
-SALIDA_CSV = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
+GRAFO_CSV  = RUTA_RESULTADOS / "dep_02_unit_graph.csv"
+SALIDA_CSV = RUTA_RESULTADOS / "report_reachability.csv"
 
 
 # =============================================================================
@@ -30,9 +30,9 @@ def cargar_grafo():
     try:
         with open(GRAFO_CSV, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
-                origen  = row.get("Unidad_Origen", "").strip()
-                destino = row.get("Unidad_Destino", "").strip()
-                tipo    = row.get("Tipo_Dep", "").strip()
+                origen  = row.get("Source_Unit", "").strip()
+                destino = row.get("Target_Unit", "").strip()
+                tipo    = row.get("Dep_Type", "").strip()
                 if origen and destino and tipo in ("CALL", "USE", "FUNC_CALL"):
                     grafo[origen].add(destino)
     except FileNotFoundError:
@@ -57,8 +57,8 @@ def nodo_en_grafo(unidad_inventario: dict, nodos_upper: dict) -> str:
       - IMPLICIT-MAIN  ->  "MAIN__<archivo>"  (igual que dependencias.py)
       - demás tipos    ->  nombre en mayúsculas (el grafo usa caps)
     """
-    tipo    = unidad_inventario.get("Tipo", "")
-    nombre  = unidad_inventario.get("Nombre", "")
+    tipo    = unidad_inventario.get("Type", "")
+    nombre  = unidad_inventario.get("Name", "")
     archivo = unidad_inventario.get("Archivo", "")
 
     if tipo == "IMPLICIT-MAIN":
@@ -121,8 +121,8 @@ def analizar_alcanzabilidad():
     # 2. Identificar entry points
     eps_unidades = [
         u for u in inventario_lista
-        if u.get("Tipo") in ("PROGRAM", "IMPLICIT-MAIN")
-        and u.get("Padre", "GLOBAL") == "GLOBAL"
+        if u.get("Type") in ("PROGRAM", "IMPLICIT-MAIN")
+        and u.get("Parent", "GLOBAL") == "GLOBAL"
     ]
 
     if not eps_unidades:
@@ -143,7 +143,7 @@ def analizar_alcanzabilidad():
 
     for u in eps_unidades:
         nodo = nodo_en_grafo(u, nodos_upper)
-        label = u["Nombre"]
+        label = u["Name"]
         if nodo:
             semillas.append(nodo)
             ep_label[nodo] = label
@@ -180,12 +180,12 @@ def analizar_alcanzabilidad():
         return visited_upper.get(nombre_inv.upper(), "")
 
     filas  = []
-    conteo = {"ALCANZABLE": 0, "NO_ALCANZABLE": 0, "ENTRADA": 0}
+    conteo = {"REACHABLE": 0, "UNREACHABLE": 0, "ENTRY_POINT": 0}
 
     for u in inventario_lista:
-        nombre = u["Nombre"]
-        tipo   = u.get("Tipo", "UNKNOWN")
-        padre  = u.get("Padre", "GLOBAL")
+        nombre = u["Name"]
+        tipo   = u.get("Type", "UNKNOWN")
+        padre  = u.get("Parent", "GLOBAL")
         arch   = u.get("Archivo", "")
 
         # Calcular nodo grafo equivalente para esta unidad
@@ -193,44 +193,44 @@ def analizar_alcanzabilidad():
 
         # ¿Es un entry point?
         if u in eps_unidades:
-            estado = "ENTRADA"
+            estado = "ENTRY_POINT"
             via    = nombre
             razon  = "Entry point (PROGRAM/IMPLICIT-MAIN)"
 
         # ¿Aparece en visited por su nodo grafo?
         elif nodo_g and nodo_g in visited:
-            estado = "ALCANZABLE"
+            estado = "REACHABLE"
             via    = "; ".join(ep_labels_for(nodo_g))
             razon  = ""
 
         # ¿Su nombre directo (minúsculas) aparece en visited?
         elif esta_alcanzado(nombre):
             nodo_enc = esta_alcanzado(nombre)
-            estado = "ALCANZABLE"
+            estado = "REACHABLE"
             via    = "; ".join(ep_labels_for(nodo_enc))
             razon  = ""
 
         # ¿Su padre (módulo contenedor) es alcanzable o entry point?
         elif padre != "GLOBAL":
             padre_nodo = nodo_en_grafo(
-                {"Tipo": "MODULE", "Nombre": padre, "Archivo": ""},
+                {"Type": "MODULE", "Name": padre, "Archivo": ""},
                 nodos_upper
             ) or padre
             if padre_nodo in visited or esta_alcanzado(padre):
                 nodo_padre = padre_nodo if padre_nodo in visited else esta_alcanzado(padre)
-                estado = "ALCANZABLE"
+                estado = "REACHABLE"
                 via    = "; ".join(ep_labels_for(nodo_padre))
                 razon  = f"Contenido en módulo alcanzable: {padre}"
-            elif padre in [u2["Nombre"] for u2 in eps_unidades]:
-                estado = "ALCANZABLE"
+            elif padre in [u2["Name"] for u2 in eps_unidades]:
+                estado = "REACHABLE"
                 via    = padre
                 razon  = f"Contenido en entry point: {padre}"
             else:
-                estado = "NO_ALCANZABLE"
+                estado = "UNREACHABLE"
                 via    = ""
                 razon  = f"Módulo contenedor no alcanzado: {padre}"
         else:
-            estado = "NO_ALCANZABLE"
+            estado = "UNREACHABLE"
             via    = ""
             nodo_en_g = nodo_g or nombre.upper()
             if nodo_en_g in {k for k in grafo} | {d for ds in grafo.values() for d in ds}:
@@ -242,19 +242,19 @@ def analizar_alcanzabilidad():
         filas.append({
             "Archivo":      arch,
             "Unidad":       nombre,
-            "Tipo":         tipo,
-            "Padre":        padre,
-            "Estado":       estado,
-            "Via_Entradas": via,
-            "Razon":        razon,
+            "Type":         tipo,
+            "Parent":       padre,
+            "Status":           estado,
+            "Via_Entry_Points": via,
+            "Reason":           razon,
         })
 
-    # 8. Ordenar: NO_ALCANZABLE primero, luego ENTRADA, luego ALCANZABLE
-    orden = {"NO_ALCANZABLE": 0, "ENTRADA": 1, "ALCANZABLE": 2}
-    filas.sort(key=lambda x: (orden[x["Estado"]], x["Archivo"].lower(), x["Unidad"].lower()))
+    # 8. Ordenar: UNREACHABLE primero, luego ENTRY_POINT, luego REACHABLE
+    orden = {"UNREACHABLE": 0, "ENTRY_POINT": 1, "REACHABLE": 2}
+    filas.sort(key=lambda x: (orden[x["Status"]], x["Archivo"].lower(), x["Unidad"].lower()))
 
     # 9. Exportar
-    columnas = ["Archivo", "Unidad", "Tipo", "Padre", "Estado", "Via_Entradas", "Razon"]
+    columnas = ["Archivo", "Unidad", "Type", "Parent", "Status", "Via_Entry_Points", "Reason"]
     with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=columnas)
         w.writeheader()
@@ -262,26 +262,26 @@ def analizar_alcanzabilidad():
 
     # 10. Resumen en consola
     total  = len(filas)
-    n_dead = conteo["NO_ALCANZABLE"]
-    n_live = conteo["ALCANZABLE"]
-    n_ep   = conteo["ENTRADA"]
+    n_dead = conteo["UNREACHABLE"]
+    n_live = conteo["REACHABLE"]
+    n_ep   = conteo["ENTRY_POINT"]
 
-    print(f"\nTotal unidades analizadas : {total}")
-    print(f"  ENTRADA               : {n_ep}")
-    print(f"  ALCANZABLE            : {n_live}")
-    print(f"  NO_ALCANZABLE (dead)  : {n_dead}  ({n_dead/total*100:.1f}%)")
+    print(f"\nTotal units analyzed : {total}")
+    print(f"  ENTRY_POINT        : {n_ep}")
+    print(f"  REACHABLE          : {n_live}")
+    print(f"  UNREACHABLE (dead) : {n_dead}  ({n_dead/total*100:.1f}%)")
 
     if n_dead > 0:
-        print("\nUnidades NO alcanzables desde ningún entry point:")
-        muertas = [r for r in filas if r["Estado"] == "NO_ALCANZABLE"]
+        print("\nUnits not reachable from any entry point:")
+        muertas = [r for r in filas if r["Status"] == "UNREACHABLE"]
         # Agrupar por archivo para legibilidad
         arch_actual = None
         for r in muertas:
             if r["Archivo"] != arch_actual:
                 arch_actual = r["Archivo"]
                 print(f"\n  [{arch_actual}]")
-            tipo_str  = f"[{r['Tipo']}]"
-            padre_str = f" (en {r['Padre']})" if r["Padre"] != "GLOBAL" else ""
+            tipo_str  = f"[{r['Type']}]"
+            padre_str = f" (en {r['Parent']})" if r["Parent"] != "GLOBAL" else ""
             print(f"    {r['Unidad']:30} {tipo_str}{padre_str}")
 
     print(f"\nGenerado: {SALIDA_CSV}")

@@ -10,11 +10,11 @@ from forti4d.config import RUTA_RESULTADOS
 # CONFIGURACIÓN
 # =============================================================================
 RUTA_AUDIT  = RUTA_RESULTADOS / "audit"
-SALIDA_CSV  = RUTA_RESULTADOS / "equivalencias.csv"
+SALIDA_CSV  = RUTA_RESULTADOS / "equivalences.csv"
 
 COLS = [
     "Archivo", "Unidad", "Tipo_Unidad",
-    "ID_Grupo", "Posicion", "Nombre_Var", "N_Miembros", "Lineas_Stmt",
+    "Group_ID", "Position", "Var_Name", "N_Members", "Stmt_Lines",
 ]
 
 
@@ -136,12 +136,12 @@ def parsear_equivalence(contenido):
 def resolver_scope(n_linea: int, unidades_en_archivo: list) -> tuple:
     candidatos = [
         u for u in unidades_en_archivo
-        if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
+        if u["Start_Line"] <= n_linea <= u["End_Line"]
     ]
     if not candidatos:
         return "GLOBAL", "FILE_SCOPE"
-    u = max(candidatos, key=lambda u: u["Linea_Inicio"])
-    return u["Nombre"], u.get("Tipo", "UNKNOWN")
+    u = max(candidatos, key=lambda u: u["Start_Line"])
+    return u["Name"], u.get("Type", "UNKNOWN")
 
 
 # =============================================================================
@@ -168,11 +168,11 @@ def extraer_equivalencias():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades[archivo].append(u)
 
     filas = []
@@ -186,7 +186,7 @@ def extraer_equivalencias():
             continue
 
         unidades_en_archivo = sorted(
-            mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"]
+            mapa_unidades[nombre_archivo], key=lambda u: u["Start_Line"]
         )
 
         # Acumular sentencias por unidad
@@ -239,11 +239,11 @@ def extraer_equivalencias():
                         "Archivo":    nombre_archivo,
                         "Unidad":     scope,
                         "Tipo_Unidad": tipo_u,
-                        "ID_Grupo":   id_grupo,
-                        "Posicion":   posicion,
-                        "Nombre_Var": nombre_var,
-                        "N_Miembros": n_miembros,
-                        "Lineas_Stmt": lineas_str,
+                        "Group_ID":   id_grupo,
+                        "Position":   posicion,
+                        "Var_Name":   nombre_var,
+                        "N_Members":  n_miembros,
+                        "Stmt_Lines": lineas_str,
                     })
 
                 n_grupos_total += 1

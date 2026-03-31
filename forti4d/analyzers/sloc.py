@@ -75,11 +75,11 @@ def analizar_sloc():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades[archivo].append(u)
 
     ruta_codigo       = CARPETA_CODIGO
@@ -103,7 +103,7 @@ def analizar_sloc():
             continue
 
         # Ordenar unidades por Linea_Inicio para scope resolution
-        unidades = sorted(mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"])
+        unidades = sorted(mapa_unidades[nombre_archivo], key=lambda u: u["Start_Line"])
 
         # Acumuladores por unidad: { nombre_unidad -> { cat -> count } }
         contadores = defaultdict(lambda: defaultdict(int))
@@ -112,17 +112,17 @@ def analizar_sloc():
             # Scope: unidad más interna que contenga lineno
             candidatos = [
                 u for u in unidades
-                if u["Linea_Inicio"] <= lineno <= u["Linea_Fin"]
+                if u["Start_Line"] <= lineno <= u["End_Line"]
             ]
             if candidatos:
-                scope = max(candidatos, key=lambda u: u["Linea_Inicio"])["Nombre"]
+                scope = max(candidatos, key=lambda u: u["Start_Line"])["Name"]
             else:
                 scope = "GLOBAL"
             contadores[scope][cat] += 1
 
         # Construir filas de salida
         for u in unidades:
-            nombre = u["Nombre"]
+            nombre = u["Name"]
             c      = contadores[nombre]
 
             loc          = c[BLANK] + c[COMMENT] + c[CODE] + c[CONTINUATION]
@@ -136,7 +136,7 @@ def analizar_sloc():
             datos_salida.append({
                 "Archivo":       nombre_archivo,
                 "Unidad":        nombre,
-                "Tipo":          u.get("Tipo", "UNKNOWN"),
+                "Type":          u.get("Type", "UNKNOWN"),
                 "LOC":           loc,
                 "N_Blancos":     n_blank,
                 "N_Comentarios": n_comment,
@@ -155,7 +155,7 @@ def analizar_sloc():
 
     # Exportar
     columnas = [
-        "Archivo", "Unidad", "Tipo",
+        "Archivo", "Unidad", "Type",
         "LOC", "N_Blancos", "N_Comentarios", "N_Continuacion",
         "SLOC_fisico", "SLOC_neto", "Pct_Comentario",
     ]

@@ -5,13 +5,13 @@ from forti4d.config import RUTA_RESULTADOS
 
 # CONFIGURACIÓN
 ARCHIVO_DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"
-ARCHIVO_IMPACTO     = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+ARCHIVO_IMPACTO     = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
 SALIDA_ESTRATEGIA   = RUTA_RESULTADOS / "reporte_estrategia_migracion.csv"
 
 # Fuentes opcionales E4 / alcanzabilidad (se usan si existen)
-ALCANZABILIDAD_CSV  = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
-SIMBOLOS_IMPL_CSV   = RUTA_RESULTADOS / "simbolos_implicit.csv"
-EQUIVALENCIAS_CSV   = RUTA_RESULTADOS / "equivalencias.csv"
+ALCANZABILIDAD_CSV  = RUTA_RESULTADOS / "report_reachability.csv"
+SIMBOLOS_IMPL_CSV   = RUTA_RESULTADOS / "symbol_implicit.csv"
+EQUIVALENCIAS_CSV   = RUTA_RESULTADOS / "equivalences.csv"
 
 # Penalización E4 sobre ICM (puntos aditivos, escala 0-100)
 E4_PENALTY_MAX = 7.0   # máximo añadido al ICM por riesgo E4
@@ -54,7 +54,7 @@ def cargar_alcanzabilidad():
     with open(ALCANZABILIDAD_CSV, encoding="utf-8-sig", errors="replace") as f:
         for row in csv.DictReader(f):
             clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
-            result[clave] = row.get("Estado", "").strip()
+            result[clave] = row.get("Status", "").strip()
     return result
 
 
@@ -69,7 +69,7 @@ def cargar_e4():
     if SIMBOLOS_IMPL_CSV.exists():
         with open(SIMBOLOS_IMPL_CSV, encoding="utf-8-sig", errors="replace") as f:
             for row in csv.DictReader(f):
-                if row.get("Es_None", "").strip() == "SI":
+                if row.get("Is_None", "").strip() == "YES":
                     clave = (row.get("Archivo", "").strip(), row.get("Unidad", "").strip())
                     impl_none_set.add(clave)
 
@@ -95,7 +95,7 @@ def cargar_impacto():
         reader = csv.DictReader(f)
         for row in reader:
             # Usamos una tupla (Archivo, Unidad) como clave única (Composite Key)
-            clave = (row["Archivo"], row["Unidad"])
+            clave = (row["Archivo"], row["Unit"])
             impacto_map[clave] = {"Fan_In": to_float(row.get("Fan_In", 0)), "Fan_Out": to_float(row.get("Fan_Out", 0))}
     return impacto_map
 
@@ -103,12 +103,12 @@ def cargar_impacto():
 def definir_estrategia(row, ivc, icm, estado_alcanz=""):
     """Motor de Reglas."""
     fan_in = row["Fan_In"]
-    tipo = row["Tipo"]
+    tipo = row["Type"]
     pct_io = row["Pct_IO"]
     pct_declar = row["Pct_Declar"]
 
     # Regla -1: Código muerto confirmado por análisis de alcanzabilidad
-    if estado_alcanz == "NO_ALCANZABLE":
+    if estado_alcanz == "UNREACHABLE":
         return "ELIMINAR", "Código muerto confirmado por análisis de alcanzabilidad"
 
     # Regla 0: Código Muerto / Punto de Entrada sin detectar
@@ -218,7 +218,7 @@ def main():
             fila_procesada = {
                 "Archivo": archivo,
                 "Unidad": unidad,
-                "Tipo": row["Tipo"],
+                "Type": row["Type"],
                 "ICM": icm,
                 "IVC": ivc,
                 "Pct_Calculo": pct_calculo,
@@ -228,7 +228,7 @@ def main():
                 "Pct_Declar": pct_declar,
                 "Fan_In": fan_in,
                 "Fan_Out": fan_out,
-                "Estado_Alcanz": estado_alcanz,
+                "Reachability_Status": estado_alcanz,
             }
 
             # Aplicar Reglas
@@ -252,7 +252,7 @@ def main():
         "Estrategia",
         "Archivo",
         "Unidad",
-        "Tipo",
+        "Type",
         "ICM",
         "IVC",
         "Pct_Calculo",
@@ -260,7 +260,7 @@ def main():
         "Pct_Legacy",
         "Fan_In",
         "Fan_Out",
-        "Estado_Alcanz",
+        "Reachability_Status",
         "Explicacion",
     ]
 

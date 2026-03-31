@@ -166,7 +166,7 @@ def analizar_densidad():
 
         # Ordenamos por Linea_Inicio para la resolución de scope
         # NOTA: Usamos la clave correcta 'Linea_Inicio'
-        unidades_en_archivo.sort(key=lambda x: x["Linea_Inicio"])
+        unidades_en_archivo.sort(key=lambda x: x["Start_Line"])
 
         # Construir ruta física
         ruta_fisica = ruta_archivos / nombre_archivo
@@ -220,11 +220,11 @@ def analizar_densidad():
 
             # Buscamos la unidad más interna que contenga n_linea (Inicio <= n <= Fin)
             candidatos = [u for u in unidades_en_archivo
-                          if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]]
+                          if u["Start_Line"] <= n_linea <= u["End_Line"]]
 
             if candidatos:
-                # El más interno es el que empezó más tarde (mayor Linea_Inicio)
-                nombre_unidad = max(candidatos, key=lambda u: u["Linea_Inicio"])["Nombre"]
+                # El más interno es el que empezó más tarde (mayor Start_Line)
+                nombre_unidad = max(candidatos, key=lambda u: u["Start_Line"])["Name"]
 
             kind = clasificar_linea(contenido)
             contadores[nombre_unidad][kind] += 1
@@ -267,13 +267,13 @@ def analizar_densidad():
 
         # Agregar GLOBAL si se detectó código fuera de unidades
         if "GLOBAL" in contadores:
-            if not any(u["Nombre"] == "GLOBAL" for u in unidades_en_archivo):
+            if not any(u["Name"] == "GLOBAL" for u in unidades_en_archivo):
                 # Creamos una unidad ficticia para el reporte
-                unidades_en_archivo.insert(0, {"Nombre": "GLOBAL", "Tipo": "FILE_SCOPE", "Linea_Inicio": 0})
+                unidades_en_archivo.insert(0, {"Name": "GLOBAL", "Type": "FILE_SCOPE", "Start_Line": 0})
 
         for u in unidades_en_archivo:
-            nombre = u["Nombre"]  # Clave correcta
-            tipo = u.get("Tipo", "UNKNOWN")  # Clave correcta
+            nombre = u["Name"]  # Clave correcta
+            tipo = u.get("Type", "UNKNOWN")  # Clave correcta
 
             c = contadores[nombre]
             total_sentencias = sum(c.values())
@@ -291,7 +291,7 @@ def analizar_densidad():
             fila = {
                 "Archivo": nombre_archivo,
                 "Unidad": nombre,
-                "Tipo": tipo,
+                "Type": tipo,
                 "Total_Sentencias": total_sentencias,
                 "Total_Calculo": n_calculo,
                 "Total_Control": n_control,
@@ -314,7 +314,7 @@ def analizar_densidad():
     headers = [
         "Archivo",
         "Unidad",
-        "Tipo",
+        "Type",
         "Total_Sentencias",
         "Total_Calculo",
         "Total_Control",

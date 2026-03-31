@@ -5,16 +5,16 @@ Fusiona todos los reportes por-unidad en un único CSV con una fila por unidad.
 Fuentes (todas opcionales salvo reporte_inventario.csv):
   reporte_inventario.csv    → base + Legacy/IO flags
   reporte_sloc.csv          → LOC, SLOC, densidad de comentario
-  reporte_complejidad.csv   → CC, nivel de complejidad
+  report_complexity.csv     → CC, complexity level
   dep_03_matriz_impacto.csv → Fan_In, Fan_Out
   reporte_densidad.csv      → perfiles de sentencias (% cálculo/control/IO…)
-  reporte_alcanzabilidad.csv→ estado ALCANZABLE / NO_ALCANZABLE / ENTRADA
+  report_reachability.csv   → status REACHABLE / UNREACHABLE / ENTRY_POINT
   common_uso.csv            → COMMON blocks usados (agregado por unidad)
-  simbolos_variables.csv    → N_Vars_Locales, N_Params
-  simbolos_firmas.csv       → N_Args_Formales
-  simbolos_implicit.csv     → Implicit_None
-  tipos_definicion.csv      → N_Tipos_Derivados
-  equivalencias.csv         → Tiene_Equiv, N_Grupos_Equiv
+  symbol_variables.csv      → N_Vars_Locales, N_Params
+  symbol_signatures.csv     → N_Args_Formales
+  symbol_implicit.csv       → Implicit_None
+  type_definitions.csv      → N_Tipos_Derivados
+  equivalences.csv          → Tiene_Equiv, N_Grupos_Equiv
   audit/*_DEBUG.csv         → N_Data_Stmts, N_Entry_Stmts (scope resolution)
 
 Output: reporte_consolidado.csv — 34 columnas, una fila por unidad.
@@ -29,18 +29,18 @@ from forti4d.config import RUTA_RESULTADOS
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-INVENTARIO  = RUTA_RESULTADOS / "reporte_inventario.csv"
+INVENTARIO  = RUTA_RESULTADOS / "inventory_report.csv"
 SLOC        = RUTA_RESULTADOS / "reporte_sloc.csv"
-COMPLEJIDAD = RUTA_RESULTADOS / "reporte_complejidad.csv"
-IMPACTO     = RUTA_RESULTADOS / "dep_03_matriz_impacto.csv"
+COMPLEJIDAD = RUTA_RESULTADOS / "report_complexity.csv"
+IMPACTO     = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
 DENSIDAD    = RUTA_RESULTADOS / "reporte_densidad.csv"
-ALCANZ      = RUTA_RESULTADOS / "reporte_alcanzabilidad.csv"
+ALCANZ      = RUTA_RESULTADOS / "report_reachability.csv"
 COMMON_USO  = RUTA_RESULTADOS / "common_uso.csv"
-SIMB_VARS   = RUTA_RESULTADOS / "simbolos_variables.csv"
-SIMB_FIRMAS = RUTA_RESULTADOS / "simbolos_firmas.csv"
-SIMB_IMPL   = RUTA_RESULTADOS / "simbolos_implicit.csv"
-TIPOS_DEF   = RUTA_RESULTADOS / "tipos_definicion.csv"
-EQUIV_CSV   = RUTA_RESULTADOS / "equivalencias.csv"
+SIMB_VARS   = RUTA_RESULTADOS / "symbol_variables.csv"
+SIMB_FIRMAS = RUTA_RESULTADOS / "symbol_signatures.csv"
+SIMB_IMPL   = RUTA_RESULTADOS / "symbol_implicit.csv"
+TIPOS_DEF   = RUTA_RESULTADOS / "type_definitions.csv"
+EQUIV_CSV   = RUTA_RESULTADOS / "equivalences.csv"
 RUTA_AUDIT  = RUTA_RESULTADOS / "audit"
 
 SALIDA_CSV  = RUTA_RESULTADOS / "reporte_consolidado.csv"
@@ -127,8 +127,8 @@ def contar_stmts_audit(inv_raw: dict) -> dict:
     mapa_por_archivo = defaultdict(list)
     for (archivo, nombre), row in inv_raw.items():
         try:
-            li = int(row.get("Linea_Inicio", 0))
-            lf = int(row.get("Linea_Fin", 0))
+            li = int(row.get("Start_Line", 0))
+            lf = int(row.get("End_Line", 0))
         except (ValueError, TypeError):
             li = lf = 0
         mapa_por_archivo[archivo].append((li, lf, nombre))
@@ -174,7 +174,7 @@ def contar_stmts_audit(inv_raw: dict) -> dict:
 def cargar_fuentes():
     print("Cargando fuentes...")
 
-    # Inventario: clave = (Archivo, Nombre)  ← el inventario usa "Nombre"
+    # Inventario: clave = (Archivo, Name)  ← el inventario usa "Name"
     inv_raw = {}
     RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
 
@@ -184,7 +184,7 @@ def cargar_fuentes():
     with open(INVENTARIO, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             a = row.get("Archivo", "").strip()
-            n = row.get("Nombre",  "").strip()
+            n = row.get("Name",    "").strip()
             if a and n:
                 inv_raw[(a, n)] = row
 
@@ -199,7 +199,7 @@ def cargar_fuentes():
         with open(IMPACTO, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 a = row.get("Archivo", "").strip()
-                u = row.get("Unidad",  "").strip()
+                u = row.get("Unit",  "").strip()
                 if a and u:
                     imp_data[(a, u)] = row
 
@@ -226,10 +226,10 @@ def cargar_fuentes():
     print(f"  alcanzabilidad: {len(alcanz_data)} entradas")
     print(f"  impacto      : {len(imp_data)} entradas")
     print(f"  common_uso   : {len(common_multi)} unidades con COMMON")
-    print(f"  simbolos_vars: {sum(len(v) for v in vars_multi.values())} vars en {len(vars_multi)} unidades")
-    print(f"  simbolos_firmas: {sum(len(v) for v in firmas_multi.values())} args en {len(firmas_multi)} unidades")
+    print(f"  symbol_vars: {sum(len(v) for v in vars_multi.values())} vars en {len(vars_multi)} unidades")
+    print(f"  symbol_signatures: {sum(len(v) for v in firmas_multi.values())} args en {len(firmas_multi)} unidades")
     print(f"  tipos_def    : {sum(len(v) for v in tipos_multi.values())} tipos en {len(tipos_multi)} unidades")
-    print(f"  equivalencias: {sum(len(v) for v in equiv_multi.values())} vars en {len(equiv_multi)} unidades")
+    print(f"  equivalences: {sum(len(v) for v in equiv_multi.values())} vars en {len(equiv_multi)} unidades")
 
     audit_stmts = contar_stmts_audit(inv_raw)
     n_data  = sum(v["N_Data_Stmts"]  for v in audit_stmts.values())
@@ -255,12 +255,12 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
         k = (archivo, nombre)
 
         # ---- IDENTIDAD ----
-        tipo  = inv.get("Tipo",  "UNKNOWN")
-        padre = inv.get("Padre", "GLOBAL")
+        tipo  = inv.get("Type",   "UNKNOWN")
+        padre = inv.get("Parent", "GLOBAL")
 
         # ---- SLOC ----
         sl = sloc_data.get(k, {})
-        loc          = safe_int(sl.get("LOC", inv.get("Lineas_Total", 0)))
+        loc          = safe_int(sl.get("LOC", inv.get("Total_Lines", 0)))
         sloc_fisico  = safe_int(sl.get("SLOC_fisico"))
         sloc_neto    = safe_int(sl.get("SLOC_neto"))
         n_comentarios= safe_int(sl.get("N_Comentarios"))
@@ -270,7 +270,7 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
         # ---- COMPLEJIDAD ----
         cc_row  = cc_data.get(k, {})
         cc      = safe_int(cc_row.get("CC", 1))
-        cc_nivel= cc_row.get("Interpretacion", "")
+        cc_nivel= cc_row.get("Level", "")
         # CC/SLOC: densidad de complejidad por sentencia
         cc_sloc = round(cc / sloc_neto, 3) if sloc_neto > 0 else 0.0
 
@@ -288,8 +288,8 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
 
         # ---- ALCANZABILIDAD ----
         al = alcanz_data.get(k, {})
-        estado      = al.get("Estado", "")
-        via_entradas= al.get("Via_Entradas", "")
+        estado      = al.get("Status", "")
+        via_entradas= al.get("Via_Entry_Points", "")
 
         # ---- COMMON BLOCKS ----
         common_rows  = common_multi.get(k, [])
@@ -298,16 +298,16 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
 
         # ---- SÍMBOLOS E4 ----
         var_rows   = vars_multi.get(k, [])
-        n_vars_loc = sum(1 for r in var_rows if r.get("Es_Parametro") == "NO")
-        n_params   = sum(1 for r in var_rows if r.get("Es_Parametro") == "SI")
+        n_vars_loc = sum(1 for r in var_rows if r.get("Is_Parameter") == "NO")
+        n_params   = sum(1 for r in var_rows if r.get("Is_Parameter") == "YES")
         n_args     = len(firmas_multi.get(k, []))
         impl_rows  = impl_multi.get(k, [])
-        impl_none  = "SI" if any(r.get("Es_None") == "SI" for r in impl_rows) else (
+        impl_none  = "YES" if any(r.get("Is_None") == "YES" for r in impl_rows) else (
                      "NO" if impl_rows else "")
         n_tipos    = len(tipos_multi.get(k, []))
         equiv_rows   = equiv_multi.get(k, [])
-        tiene_equiv  = "SI" if equiv_rows else "NO"
-        n_grupos_equiv = len({r.get("ID_Grupo", "") for r in equiv_rows} - {""}) if equiv_rows else 0
+        tiene_equiv  = "YES" if equiv_rows else "NO"
+        n_grupos_equiv = len({r.get("Group_ID", "") for r in equiv_rows} - {""}) if equiv_rows else 0
 
         # ---- AUDIT STATEMENT COUNTS ----
         ast = audit_stmts.get(k, {})
@@ -322,8 +322,8 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
             # Identidad
             "Archivo":        archivo,
             "Unidad":         nombre,
-            "Tipo":           tipo,
-            "Padre":          padre,
+            "Type":           tipo,
+            "Parent":         padre,
             # Tamaño
             "LOC":            loc,
             "SLOC_fisico":    sloc_fisico,
@@ -347,8 +347,8 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
             "N_Common_Bloques": n_common_bloq,
             "Common_Bloques":   common_bloq,
             # Alcanzabilidad
-            "Estado":         estado,
-            "Via_Entradas":   via_entradas,
+            "Status":           estado,
+            "Via_Entry_Points": via_entradas,
             # Símbolos E4
             "N_Vars_Locales":    n_vars_loc,
             "N_Params":          n_params,
@@ -372,13 +372,13 @@ def construir_filas(inv_raw, sloc_data, cc_data, dens_data, alcanz_data, imp_dat
 # =============================================================================
 
 COLUMNAS = [
-    "Archivo", "Unidad", "Tipo", "Padre",
+    "Archivo", "Unidad", "Type", "Parent",
     "LOC", "SLOC_fisico", "SLOC_neto", "N_Comentarios", "N_Continuacion", "Pct_Comentario",
     "CC", "CC_Nivel", "CC_SLOC",
     "Fan_In", "Fan_Out",
     "Pct_Calculo", "Pct_Control", "Pct_IO", "Pct_Legacy",
     "N_Common_Bloques", "Common_Bloques",
-    "Estado", "Via_Entradas",
+    "Status", "Via_Entry_Points",
     "N_Vars_Locales", "N_Params", "N_Args_Formales", "Implicit_None", "N_Tipos_Derivados",
     "Tiene_Equiv", "N_Grupos_Equiv",
     "N_Data_Stmts", "N_Entry_Stmts",
@@ -410,8 +410,8 @@ def main():
     total = len(filas)
     con_cc     = sum(1 for r in filas if r["CC_Nivel"])
     sin_sloc   = sum(1 for r in filas if r["SLOC_neto"] == 0)
-    muertas    = sum(1 for r in filas if r["Estado"] == "NO_ALCANZABLE")
-    criticas   = sum(1 for r in filas if r["CC_Nivel"] == "CRITICA")
+    muertas    = sum(1 for r in filas if r["Status"] == "UNREACHABLE")
+    criticas   = sum(1 for r in filas if r["CC_Nivel"] == "CRITICAL")
     sin_coment = sum(1 for r in filas if r["Pct_Comentario"] == 0 and r["SLOC_neto"] > 10)
 
     print(f"\nConsolidado generado: {SALIDA_CSV}")

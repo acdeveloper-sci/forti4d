@@ -92,11 +92,11 @@ def analizar_common():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades[archivo].append(u)
 
     # Estructura de resultados:
@@ -106,8 +106,8 @@ def analizar_common():
     meta = {}   # (archivo, unidad) -> dict con Tipo
 
     for u in inventario_lista:
-        k = (u["Archivo"], u["Nombre"])
-        meta[k] = {"Tipo": u.get("Tipo", "UNKNOWN")}
+        k = (u["Archivo"], u["Name"])
+        meta[k] = {"Type": u.get("Type", "UNKNOWN")}
 
     ruta_audit = RUTA_AUDIT
     archivos_ordenados = sorted(mapa_unidades.keys(), key=str.lower)
@@ -120,7 +120,7 @@ def analizar_common():
             continue
 
         unidades_en_archivo = sorted(
-            mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"]
+            mapa_unidades[nombre_archivo], key=lambda u: u["Start_Line"]
         )
 
         with open(debug_file, encoding="utf-8-sig") as f:
@@ -142,16 +142,16 @@ def analizar_common():
                 # Scope resolution
                 candidatos = [
                     u for u in unidades_en_archivo
-                    if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
+                    if u["Start_Line"] <= n_linea <= u["End_Line"]
                 ]
                 if not candidatos:
                     scope = "GLOBAL"
                     tipo  = "FILE_SCOPE"
                 else:
-                    u_scope = max(candidatos, key=lambda u: u["Linea_Inicio"])
-                    scope   = u_scope["Nombre"]
-                    tipo    = u_scope.get("Tipo", "UNKNOWN")
-                    meta[(nombre_archivo, scope)] = {"Tipo": tipo}
+                    u_scope = max(candidatos, key=lambda u: u["Start_Line"])
+                    scope   = u_scope["Name"]
+                    tipo    = u_scope.get("Type", "UNKNOWN")
+                    meta[(nombre_archivo, scope)] = {"Type": tipo}
 
                 for bloque in bloques:
                     uso[(nombre_archivo, scope)][bloque] += 1
@@ -162,7 +162,7 @@ def analizar_common():
         print("(El código utiliza módulos F90 en lugar de COMMON blocks)")
         # Generar CSVs vacíos con cabecera para mantener consistencia del pipeline
         _escribir_csv_vacio(SALIDA_USO,
-            ["Archivo", "Unidad", "Tipo", "Bloque", "Apariciones"])
+            ["Archivo", "Unidad", "Type", "Bloque", "Apariciones"])
         _escribir_csv_vacio(SALIDA_ACOPLAMIENTO,
             ["Bloque", "N_Unidades", "N_Archivos", "Riesgo", "Unidades", "Archivos"])
         return
@@ -170,12 +170,12 @@ def analizar_common():
     # 2. Construir reporte de uso (una fila por (unidad, bloque))
     filas_uso = []
     for (archivo, unidad), bloques_cnt in sorted(uso.items()):
-        tipo = meta.get((archivo, unidad), {}).get("Tipo", "UNKNOWN")
+        tipo = meta.get((archivo, unidad), {}).get("Type", "UNKNOWN")
         for bloque, apariciones in sorted(bloques_cnt.items()):
             filas_uso.append({
                 "Archivo":     archivo,
                 "Unidad":      unidad,
-                "Tipo":        tipo,
+                "Type":        tipo,
                 "Bloque":      bloque,
                 "Apariciones": apariciones,
             })
@@ -213,7 +213,7 @@ def analizar_common():
 
     # 4. Exportar
     _escribir_csv(SALIDA_USO, filas_uso,
-        ["Archivo", "Unidad", "Tipo", "Bloque", "Apariciones"])
+        ["Archivo", "Unidad", "Type", "Bloque", "Apariciones"])
 
     _escribir_csv(SALIDA_ACOPLAMIENTO, filas_acoplamiento,
         ["Bloque", "N_Unidades", "N_Archivos", "Riesgo", "Unidades", "Archivos"])

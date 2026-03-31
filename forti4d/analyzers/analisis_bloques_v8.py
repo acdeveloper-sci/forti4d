@@ -245,7 +245,7 @@ def main(archivo_debug):
 
     # 1. Cargar metadatos
     inv = cargar_inventario()
-    unidades_map = {u["Nombre"]: u for u in inv if u["Archivo"].lower() == nombre_fuente.lower()}
+    unidades_map = {u["Name"]: u for u in inv if u["Archivo"].lower() == nombre_fuente.lower()}
 
     # 2. Cargar líneas crudas
     lineas_por_unidad = defaultdict(list)
@@ -257,7 +257,7 @@ def main(archivo_debug):
 
     # Asignar líneas a unidades
     for nombre, u in unidades_map.items():
-        ini, fin = int(u["Linea_Inicio"]), int(u["Linea_Fin"])
+        ini, fin = int(u["Start_Line"]), int(u["End_Line"])
         mis_lineas = [l for l in lineas_raw if ini <= l["n"] <= fin]
         mis_lineas.sort(key=lambda x: x["n"])
         lineas_por_unidad[nombre] = mis_lineas
@@ -275,20 +275,20 @@ def main(archivo_debug):
             return
 
         lineas = lineas_por_unidad[nombre_u]
-        hijos = [h["Nombre"] for h in inv if h["Padre"] == nombre_u]
+        hijos = [h["Name"] for h in inv if h["Parent"] == nombre_u]
         hijos_objs = [unidades_map[h] for h in hijos if h in unidades_map]
-        hijos_objs.sort(key=lambda x: int(x["Linea_Inicio"]))
+        hijos_objs.sort(key=lambda x: int(x["Start_Line"]))
 
         indent = "    " * nivel
-        print(f"\n{indent}>> UNIDAD: {nombre_u} ({u['Tipo']})")
+        print(f"\n{indent}>> UNIDAD: {nombre_u} ({u['Type']})")
 
         # Procesar segmentos entre hijos (Huecos)
         cursor = 0
         total = len(lineas)
 
         for h in hijos_objs:
-            h_ini = int(h["Linea_Inicio"])
-            h_fin = int(h["Linea_Fin"])
+            h_ini = int(h["Start_Line"])
+            h_fin = int(h["End_Line"])
 
             # Segmento antes del hijo
             seg = []
@@ -301,7 +301,7 @@ def main(archivo_debug):
                 imprimir_bloques(bloques, indent + "  ")
 
             # Recurrir al hijo
-            reportar(h["Nombre"], nivel + 1)
+            reportar(h["Name"], nivel + 1)
 
             # Saltar líneas del hijo en el padre
             while cursor < total and lineas[cursor]["n"] <= h_fin:
@@ -320,11 +320,11 @@ def main(archivo_debug):
     print(f"ANÁLISIS ESTRUCTURAL V10: {nombre_fuente}")
     print("=" * 80)
 
-    raices = [u for u in unidades_map.values() if u["Padre"] == "GLOBAL"]
-    raices.sort(key=lambda x: int(x["Linea_Inicio"]))
+    raices = [u for u in unidades_map.values() if u["Parent"] == "GLOBAL"]
+    raices.sort(key=lambda x: int(x["Start_Line"]))
 
     for r in raices:
-        reportar(r["Nombre"])
+        reportar(r["Name"])
 
 
 if __name__ == "__main__":

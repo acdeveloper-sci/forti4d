@@ -22,8 +22,8 @@ from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-AMBIGUEDADES = RUTA_RESULTADOS / "dep_00_ambiguedades.csv"
-SALIDA_CSV   = RUTA_RESULTADOS / "reporte_clones.csv"
+AMBIGUEDADES = RUTA_RESULTADOS / "dep_00_ambiguities.csv"
+SALIDA_CSV   = RUTA_RESULTADOS / "report_clones.csv"
 
 # Umbral de similitud: >= este valor → SIMILAR; == 1.0 → IDENTICO
 UMBRAL_SIMILAR = 0.80
@@ -78,10 +78,10 @@ def similitud(lineas_a: list, lineas_b: list) -> float:
 
 def clasificar(ratio: float) -> str:
     if ratio >= 1.0:
-        return "IDENTICO"
+        return "IDENTICAL"
     if ratio >= UMBRAL_SIMILAR:
         return "SIMILAR"
-    return "DIVERGIDO"
+    return "DIVERGED"
 
 
 # =============================================================================
@@ -100,11 +100,11 @@ def main():
     # Index: (archivo_basename, nombre_upper) → {tipo, inicio, fin}
     inv_idx = {}
     for row in inventario:
-        key = (row["Archivo"], row["Nombre"].upper())
+        key = (row["Archivo"], row["Name"].upper())
         inv_idx[key] = {
-            "tipo":   row["Tipo"],
-            "inicio": int(row["Linea_Inicio"]),
-            "fin":    int(row["Linea_Fin"]),
+            "tipo":   row["Type"],
+            "inicio": int(row["Start_Line"]),
+            "fin":    int(row["End_Line"]),
         }
 
     # Load ambiguedades
@@ -115,9 +115,9 @@ def main():
     grupos = []  # [(nombre, tipo, [archivo1, archivo2, ...])]
     with open(AMBIGUEDADES, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            nombre  = row["Nombre_Unidad"].strip().upper()
-            tipo    = row["Tipo"].strip()
-            archivos = [a.strip() for a in row["Lista_Archivos"].split(";") if a.strip()]
+            nombre  = row["Unit_Name"].strip().upper()
+            tipo    = row["Type"].strip()
+            archivos = [a.strip() for a in row["File_List"].split(";") if a.strip()]
             if len(archivos) >= 2:
                 grupos.append((nombre, tipo, archivos))
 
@@ -154,41 +154,41 @@ def main():
                 estado = clasificar(ratio)
 
                 filas.append({
-                    "Nombre":        nombre,
-                    "Tipo":          tipo,
+                    "Unit":          nombre,
+                    "Type":          tipo,
                     "Archivo_A":     arch_a,
                     "Archivo_B":     arch_b,
                     "SLOC_A":        len(lineas_a),
                     "SLOC_B":        len(lineas_b),
                     "Similitud_Pct": round(ratio * 100, 1),
-                    "Estado":        estado,
+                    "Status":        estado,
                 })
 
     # Sort: diverged first, then similar, then identical; then by name
-    _orden = {"DIVERGIDO": 0, "SIMILAR": 1, "IDENTICO": 2}
-    filas.sort(key=lambda r: (_orden[r["Estado"]], r["Nombre"]))
+    _orden = {"DIVERGED": 0, "SIMILAR": 1, "IDENTICAL": 2}
+    filas.sort(key=lambda r: (_orden[r["Status"]], r["Unit"]))
 
-    campos = ["Nombre", "Tipo", "Archivo_A", "Archivo_B",
-              "SLOC_A", "SLOC_B", "Similitud_Pct", "Estado"]
+    campos = ["Unit", "Type", "Archivo_A", "Archivo_B",
+              "SLOC_A", "SLOC_B", "Similitud_Pct", "Status"]
     with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=campos)
         w.writeheader()
         w.writerows(filas)
 
-    n_id  = sum(1 for r in filas if r["Estado"] == "IDENTICO")
-    n_sim = sum(1 for r in filas if r["Estado"] == "SIMILAR")
-    n_div = sum(1 for r in filas if r["Estado"] == "DIVERGIDO")
+    n_id  = sum(1 for r in filas if r["Status"] == "IDENTICAL")
+    n_sim = sum(1 for r in filas if r["Status"] == "SIMILAR")
+    n_div = sum(1 for r in filas if r["Status"] == "DIVERGED")
 
-    print(f"\n{len(filas)} pares comparados  ({len(grupos)} unidades con duplicados)")
-    print(f"  IDENTICO  : {n_id}")
+    print(f"\n{len(filas)} pairs compared  ({len(grupos)} units with duplicates)")
+    print(f"  IDENTICAL : {n_id}")
     print(f"  SIMILAR   : {n_sim}")
-    print(f"  DIVERGIDO : {n_div}")
-    print(f"\nGenerado: {SALIDA_CSV}")
+    print(f"  DIVERGED  : {n_div}")
+    print(f"\nGenerated: {SALIDA_CSV}")
 
 
 def _escribir_vacio():
-    campos = ["Nombre", "Tipo", "Archivo_A", "Archivo_B",
-              "SLOC_A", "SLOC_B", "Similitud_Pct", "Estado"]
+    campos = ["Unit", "Type", "Archivo_A", "Archivo_B",
+              "SLOC_A", "SLOC_B", "Similitud_Pct", "Status"]
     with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
         csv.DictWriter(f, fieldnames=campos).writeheader()
 

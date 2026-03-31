@@ -10,21 +10,21 @@ from forti4d.config import RUTA_RESULTADOS
 # CONFIGURACIÓN
 # =============================================================================
 RUTA_AUDIT    = RUTA_RESULTADOS / "audit"
-SALIDA_VARS   = RUTA_RESULTADOS / "simbolos_variables.csv"
-SALIDA_FIRMAS = RUTA_RESULTADOS / "simbolos_firmas.csv"
-SALIDA_IMPL   = RUTA_RESULTADOS / "simbolos_implicit.csv"
+SALIDA_VARS   = RUTA_RESULTADOS / "symbol_variables.csv"
+SALIDA_FIRMAS = RUTA_RESULTADOS / "symbol_signatures.csv"
+SALIDA_IMPL   = RUTA_RESULTADOS / "symbol_implicit.csv"
 
 COLS_VARIABLES = [
     "Archivo", "Unidad", "Tipo_Unidad", "Linea",
-    "Nombre_Var", "Tipo_Fortran", "Kind_Param", "Dimension",
-    "Atributos", "Intent", "Valor_Inicial", "Es_Parametro", "En_Common", "Truncada",
+    "Var_Name", "Fortran_Type", "Kind_Param", "Dimension",
+    "Attributes", "Intent", "Initial_Value", "Is_Parameter", "In_Common", "Truncated",
 ]
 COLS_FIRMAS = [
-    "Archivo", "Unidad", "Tipo_Unidad", "Linea_Firma",
-    "Posicion", "Nombre_Arg", "Tipo_Retorno",
+    "Archivo", "Unidad", "Tipo_Unidad", "Signature_Line",
+    "Position", "Arg_Name", "Return_Type",
 ]
 COLS_IMPLICIT = [
-    "Archivo", "Unidad", "Tipo_Unidad", "Linea", "Regla", "Es_None",
+    "Archivo", "Unidad", "Tipo_Unidad", "Linea", "Rule", "Is_None",
 ]
 
 
@@ -240,16 +240,16 @@ def parsear_var_entry(entry: str, tipo_base: str, kind_base: str, dim_base: str,
         return {}
 
     return {
-        "Nombre_Var":    nombre.upper(),
-        "Tipo_Fortran":  tipo_base,
+        "Var_Name":      nombre.upper(),
+        "Fortran_Type":  tipo_base,
         "Kind_Param":    kind,
         "Dimension":     dim,
-        "Atributos":     "|".join(attrs) if attrs else "",
+        "Attributes":    "|".join(attrs) if attrs else "",
         "Intent":        intent,
-        "Valor_Inicial": valor,
-        "Es_Parametro":  "SI" if (es_param or bool(valor)) else "NO",
-        "En_Common":     "",   # se rellena en post-proceso
-        "Truncada":      "NO",
+        "Initial_Value": valor,
+        "Is_Parameter":  "YES" if (es_param or bool(valor)) else "NO",
+        "In_Common":     "",   # se rellena en post-proceso
+        "Truncated":     "NO",
     }
 
 
@@ -283,7 +283,7 @@ def parsear_declaracion(contenido: str, scope: str, tipo_unidad: str,
                 info["intent"], info["attrs"], info["es_param"],
             )
             if fila:
-                fila["Truncada"] = "SI" if truncada else "NO"
+                fila["Truncated"] = "YES" if truncada else "NO"
                 filas.append({**base, **fila})
     else:
         # F77 sin :: — intentar tipo base primero
@@ -300,7 +300,7 @@ def parsear_declaracion(contenido: str, scope: str, tipo_unidad: str,
             for entry in split_lista(lista_str):
                 fila = parsear_var_entry(entry, "", "", "", "", [attr_nombre], False)
                 if fila:
-                    fila["Truncada"] = "SI" if truncada else "NO"
+                    fila["Truncated"] = "YES" if truncada else "NO"
                     filas.append({**base, **fila})
             return filas
 
@@ -312,7 +312,7 @@ def parsear_declaracion(contenido: str, scope: str, tipo_unidad: str,
         for entry in split_lista(lista_str):
             fila = parsear_var_entry(entry, tipo_base, kind_suffix, "", "", [], False)
             if fila:
-                fila["Truncada"] = "SI" if truncada else "NO"
+                fila["Truncated"] = "YES" if truncada else "NO"
                 filas.append({**base, **fila})
 
     return filas
@@ -341,16 +341,16 @@ def parsear_parameter(contenido: str, scope: str, tipo_unidad: str,
             continue
         filas.append({
             **base,
-            "Nombre_Var":    nombre,
-            "Tipo_Fortran":  "",   # tipo implícito; no conocido aquí
+            "Var_Name":      nombre,
+            "Fortran_Type":  "",   # tipo implícito; no conocido aquí
             "Kind_Param":    "",
             "Dimension":     "",
-            "Atributos":     "PARAMETER",
+            "Attributes":    "PARAMETER",
             "Intent":        "",
-            "Valor_Inicial": valor.strip(),
-            "Es_Parametro":  "SI",
-            "En_Common":     "",
-            "Truncada":      "NO",
+            "Initial_Value": valor.strip(),
+            "Is_Parameter":  "YES",
+            "In_Common":     "",
+            "Truncated":     "NO",
         })
     return filas
 
@@ -370,7 +370,7 @@ def parsear_implicit(contenido: str, scope: str, tipo_unidad: str,
     return {
         "Archivo": archivo, "Unidad": scope,
         "Tipo_Unidad": tipo_unidad, "Linea": n_linea,
-        "Regla": regla, "Es_None": "SI" if es_none else "NO",
+        "Rule": regla, "Is_None": "YES" if es_none else "NO",
     }
 
 
@@ -409,13 +409,13 @@ def parsear_firma(contenido: str, kind: str, scope: str, tipo_unidad: str,
         if not arg_nombre or arg_nombre == "*":  # * = retorno alternativo F77
             continue
         filas.append({
-            "Archivo":      archivo,
-            "Unidad":       scope,
-            "Tipo_Unidad":  tipo_unidad,
-            "Linea_Firma":  n_linea,
-            "Posicion":     i,
-            "Nombre_Arg":   arg_nombre,
-            "Tipo_Retorno": tipo_retorno,
+            "Archivo":        archivo,
+            "Unidad":         scope,
+            "Tipo_Unidad":    tipo_unidad,
+            "Signature_Line": n_linea,
+            "Position":       i,
+            "Arg_Name":       arg_nombre,
+            "Return_Type":    tipo_retorno,
         })
 
     return filas
@@ -475,12 +475,12 @@ def resolver_scope(n_linea: int, unidades_en_archivo: list) -> tuple:
     """
     candidatos = [
         u for u in unidades_en_archivo
-        if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
+        if u["Start_Line"] <= n_linea <= u["End_Line"]
     ]
     if not candidatos:
         return "GLOBAL", "FILE_SCOPE"
-    u = max(candidatos, key=lambda u: u["Linea_Inicio"])
-    return u["Nombre"], u.get("Tipo", "UNKNOWN")
+    u = max(candidatos, key=lambda u: u["Start_Line"])
+    return u["Name"], u.get("Type", "UNKNOWN")
 
 
 # =============================================================================
@@ -516,11 +516,11 @@ def extraer_simbolos():
         if not archivo:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"]   = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
+            u["Start_Line"] = 0
+            u["End_Line"]   = 0
         mapa_unidades[archivo].append(u)
 
     filas_vars   = []
@@ -541,7 +541,7 @@ def extraer_simbolos():
             continue
 
         unidades_en_archivo = sorted(
-            mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"]
+            mapa_unidades[nombre_archivo], key=lambda u: u["Start_Line"]
         )
 
         with open(debug_file, encoding="utf-8-sig") as f:
@@ -589,10 +589,10 @@ def extraer_simbolos():
                     mapping = extraer_vars_common(contenido)
                     common_map[(nombre_archivo, scope.upper())].update(mapping)
 
-    # 3. Post-proceso: enriquecer filas_vars con En_Common
+    # 3. Post-proceso: enriquecer filas_vars con In_Common
     for fila in filas_vars:
         clave = (fila["Archivo"], fila["Unidad"].upper())
-        fila["En_Common"] = common_map.get(clave, {}).get(fila["Nombre_Var"], "")
+        fila["In_Common"] = common_map.get(clave, {}).get(fila["Var_Name"], "")
 
     # 4. Exportar CSVs
     _escribir_csv(SALIDA_VARS,   filas_vars,   COLS_VARIABLES)
@@ -601,7 +601,7 @@ def extraer_simbolos():
 
     # 5. Resumen en consola
     n_units_impl = len({(f["Archivo"], f["Unidad"]) for f in filas_impl})
-    n_impl_none  = sum(1 for f in filas_impl if f["Es_None"] == "SI")
+    n_impl_none  = sum(1 for f in filas_impl if f["Is_None"] == "YES")
     n_con_common = len(common_map)
 
     print(f"Variables / constantes  : {n_vars}")
