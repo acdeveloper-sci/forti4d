@@ -1,18 +1,18 @@
-# * ATENCIÓN
-# * ESTE CÓDIGO VIENE DEL INTENTO DE PROYECTO UBICADO EN
-# * D:\Documents\fiverr\violeta_m1969\job01\revision\forttools-dev\hbf\hbf-core
-# * Este archivo es lo que corresponde a
+# * NOTE
+# * THIS CODE ORIGINATED FROM AN EARLIER PROJECT LOCATED AT
+# * forttools-dev\hbf\hbf-core
+# * This file corresponds to
 # *   hbf\hbf-core\src\hbf\core\lines
 # *
-# * En sí el proyecto consta de dos librerías independientes,
-# * uno la base y el otro las herramientas
+# * The project consists of two independent libraries,
+# * one the base and the other the tools:
 # *   hbf\hbf-core\src\hbf\core
 # *   hbf\hbf-core\src\hbf\tools
 # *
-# * Tomé el reader.py como base para este, colocando el dataclass LogicalLine dentro,
-# * porque este lector de archivos de código fuente Fortran ya está muy pulido
-# * para crear script que hagan cosas directas y confiables sin mucho aparataje
-# * arquitectónico como en ese proyecto
+# * reader.py was taken as the base for this file, placing the LogicalLine dataclass inside,
+# * because this Fortran source code file reader is already well-polished
+# * for writing scripts that do direct and reliable tasks without much architectural
+# * scaffolding as in that original project.
 #
 import re
 from pathlib import Path
@@ -34,7 +34,7 @@ class LogicalLine:
 
 def split_by_symbol_outof_quotation(text: str, symbol: str) -> Tuple[str, str]:
     """
-    Divide el texto por el símbolo solo si no está dentro de comillas.
+    Splits text at the symbol only if it is not inside quotes.
     """
     in_quoting = None
     for i, c in enumerate(text):
@@ -50,76 +50,56 @@ def split_by_symbol_outof_quotation(text: str, symbol: str) -> Tuple[str, str]:
 
 def strip_inline_comment(line: str, comment_char: str = "!") -> Tuple[str, str]:
     """
-    Separa código y comentarios respetando strings.
+    Separates code and comments respecting strings.
     """
     code, comment = split_by_symbol_outof_quotation(line, comment_char)
     return code, comment
 
 
-# def remove_continuation_chars(line: str, format_type: str) -> str:
-#     """
-#     Elimina caracteres de continuación y espacios extra.
-#     """
-#     if format_type == "free":
-#         # Usamos strip_inline_comment para aislar el código seguro
-#         code, _ = strip_inline_comment(line)
-#         code = code.rstrip()
-#         if code.endswith("&"):
-#             code = code[:-1].rstrip()
-#         if code.strip().startswith("&"):
-#             code = code.strip()[1:].strip()
-#         return code
-#     elif format_type == "fixed":
-#         # En fijo, la marca está en col 6 (fuera del contenido útil)
-#         # o el contenido útil empieza en col 7. Esta función limpia el contenido.
-#         return line
-#     return line
-
-
 def remove_continuation_chars(line: str, format_type: str) -> str:
     """
-    Elimina caracteres de continuación según el formato.
-    En 'free', quita el '&' al final (y el '&' inicial si existe).
-    En 'fixed', devuelve el contenido a partir de la columna 7 (limpiando la col 6).
+    Removes continuation characters according to format.
+    In 'free', strips the trailing '&' (and leading '&' if present).
+    In 'fixed', returns content starting from column 7 (stripping col 6).
     """
     if format_type == "free":
         code, _ = strip_inline_comment(line)
         code = code.rstrip()
-        # Quitar ampersand al final
+        # Strip trailing ampersand
         if code.endswith("&"):
             code = code[:-1].rstrip()
-        # Quitar ampersand al inicio (opcional en F90+ pero válido)
+        # Strip leading ampersand (optional in F90+ but valid)
         if code.strip().startswith("&"):
             code = code.strip()[1:].strip()
         return code
 
     elif format_type == "fixed":
-        # Si la línea es lo suficientemente larga, el código real empieza en la col 7 (índice 6)
-        # La columna 6 (índice 5) es la marca que DEBEMOS ignorar.
+        # If the line is long enough, real code starts at col 7 (index 6)
+        # Column 6 (index 5) is the continuation marker and MUST be ignored.
         if len(line) >= 6:
             return line[6:]
-        return ""  # Línea demasiado corta para tener código en formato fijo
+        return ""  # Line too short to contain code in fixed format
 
     return line
 
 
 def has_continuation_char(line: str, format_type: str) -> bool:
     """
-    Detecta si la línea actual solicita continuación en la SIGUIENTE (Estilo F90 '&').
+    Detects whether the current line requests continuation on the NEXT line (F90 '&' style).
     """
     if format_type == "free":
         code, _ = strip_inline_comment(line)
         return code.rstrip().endswith("&")
     elif format_type == "fixed":
-        # En fixed, la línea actual NUNCA dice "continuaré".
-        # Es la siguiente la que dice "soy continuación".
+        # In fixed format, the current line NEVER says "I will continue".
+        # It is the next line that says "I am a continuation".
         return False
     return False
 
 
 def extract_label_from_line(line: str, format_type: str) -> Optional[str]:
     """
-    Extrae la etiqueta numérica de la sentencia.
+    Extracts the numeric label from the statement.
     """
     if format_type == "fixed":
         label_field = line[0:5].strip()
@@ -132,86 +112,86 @@ def extract_label_from_line(line: str, format_type: str) -> Optional[str]:
     return None
 
 
-# LECTOR DE LÍNEAS LÓGICAS (CORE LOGIC)
+# LOGICAL LINE READER (CORE LOGIC)
 
 
 def read_logical_lines(filepath: str) -> List[LogicalLine]:
     """
-    Lee un archivo Fortran y retorna una lista de LogicalLine.
-    Implementa "Registro Diferido" para manejar robustamente la continuación de líneas
-    en formatos Fijo (F77) y Libre (F90).
+    Reads a Fortran file and returns a list of LogicalLine.
+    Implements "Deferred Registration" to robustly handle line continuation
+    in Fixed (F77) and Free (F90) formats.
     """
     path_obj = Path(filepath)
 
-    # Detección de formato
+    # Format detection
     is_fixed_format = path_obj.suffix.lower() in [".f", ".for", ".f77"]
     format_type = "fixed" if is_fixed_format else "free"
 
     vlines: List[LogicalLine] = []
 
-    # Estado del Buffer (Línea Lógica en construcción)
+    # Buffer State (Logical Line under construction)
     buffer_content: List[str] = []
     buffer_raw_lines: List[Tuple[int, str]] = []
     logical_start_num: Optional[int] = None
 
-    # Estado de Continuación (Persistencia entre iteraciones)
-    # Indica si la línea ANTERIOR terminó con un '&' (solicitando continuación)
+    # Continuation State (Persists between iterations)
+    # Indicates whether the PREVIOUS line ended with '&' (requesting continuation)
     expecting_f90_continuation = False
 
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         for line_num, line in enumerate(f, 1):
             raw_physical_line = line.rstrip("\n")
 
-            # A) Detección de marca F77 (Columna 6)
-            #    Vital hacerlo antes de limpiar, porque define si es código o continuación.
+            # A) F77 marker detection (Column 6)
+            #    Must be done before cleaning, because it determines code vs. continuation.
             is_f77_continuation_mark = False
             if is_fixed_format and len(raw_physical_line) >= 6:
                 if raw_physical_line[5] not in (" ", "0"):
                     is_f77_continuation_mark = True
 
-            # --- 1. Detección de Comentarios (Filtro Previo) ---
-            # Identificamos si es un comentario "puro" (toda la línea)
+            # --- 1. Comment Detection (Pre-filter) ---
+            # Identify whether this is a "pure" comment (entire line)
 
-            # B) Detección de Comentarios (Lógica Robusta Híbrida)
+            # B) Comment Detection (Robust Hybrid Logic)
             is_logical_comment = False
 
             if is_fixed_format:
-                # Caso 1: Comentario clásico en Columna 1
+                # Case 1: Classic comment in Column 1
                 if len(raw_physical_line) > 0 and raw_physical_line[0].upper() in ("C", "*", "!"):
                     is_logical_comment = True
-                # Caso 2: Comentario moderno indentado (! en cualquier parte)
-                # OJO: Solo si NO es una línea de continuación (Col 6 vacía)
+                # Case 2: Modern indented comment (! anywhere)
+                # NOTE: Only if NOT a continuation line (Col 6 empty)
                 elif not is_f77_continuation_mark:
-                    # Quitamos márgenes (cols 1-6) y buscamos !
+                    # Strip margins (cols 1-6) and look for !
                     content_part = raw_physical_line[6:] if len(raw_physical_line) >= 6 else ""
                     if content_part.strip().startswith("!"):
                         is_logical_comment = True
             else:
-                # Formato Libre
+                # Free Format
                 code_part, comment_part = strip_inline_comment(raw_physical_line)
                 if not code_part.strip() and comment_part.strip():
                     is_logical_comment = True
 
-            # C) Ignorar líneas totalmente vacías (sin código ni comentario)
+            # C) Ignore completely empty lines (no code or comment)
             # if not raw_physical_line.strip():
             #     continue
 
-            # C) Detección de Línea Vacía (Blank Line)
-            # Definimos "vacía" como línea sin caracteres visibles
+            # C) Blank Line Detection
+            # We define "blank" as a line with no visible characters
             is_blank_line = not raw_physical_line.strip()
 
             # -----------------------------------------------------------------
-            # 2. MANEJO DE LÍNEAS NO EJECUTABLES (COMENTARIOS Y VACÍAS) Y FLUSHING
+            # 2. HANDLING NON-EXECUTABLE LINES (COMMENTS AND BLANK) AND FLUSHING
             # -----------------------------------------------------------------
             if is_logical_comment or is_blank_line:
-                # 2.1 FLUSH CONDICIONAL
-                # Si hay buffer pendiente y NO estamos esperando continuación explícita (F90 &),
-                # esta línea intermedia confirma que la sentencia anterior terminó.
-                # Nota: Si expecting_f90_continuation es True, NO flusheamos; la línea vacía/comentario
-                # se inserta "en medio" de la construcción lógica (intercalada).
+                # 2.1 CONDITIONAL FLUSH
+                # If there is a pending buffer and we are NOT expecting explicit continuation (F90 &),
+                # this intermediate line confirms the previous statement ended.
+                # Note: If expecting_f90_continuation is True, we do NOT flush; the blank/comment line
+                # is inserted "in the middle" of the logical construct (interleaved).
 
                 if buffer_content and not expecting_f90_continuation:
-                    # FLUSH BUFFER ANTERIOR
+                    # FLUSH PREVIOUS BUFFER
                     final_text = " ".join(buffer_content)
                     first_raw = buffer_raw_lines[0][1]
                     label = extract_label_from_line(first_raw, format_type) or None
@@ -227,13 +207,13 @@ def read_logical_lines(filepath: str) -> List[LogicalLine]:
                     )
                     buffer_content = []
                     buffer_raw_lines = []
-                    # Nota: No reseteamos expecting_f90_continuation porque un comentario
-                    # NO debería romper una continuación pendiente (si es que la hubiera).
+                    # Note: We do NOT reset expecting_f90_continuation because a comment
+                    # should NOT break a pending continuation (if any).
 
-                # 2.2 REGISTRO DE LA LÍNEA ACTUAL
-                # Se registra fielmente.
-                # - Si es comentario: is_comment=True
-                # - Si es vacía: is_comment=False (Es whitespace, el classifier dirá que es COMMENT o nada)
+                # 2.2 REGISTER CURRENT LINE
+                # Registered faithfully.
+                # - If comment: is_comment=True
+                # - If blank: is_comment=False (It is whitespace; the classifier will say COMMENT or nothing)
 
                 vlines.append(
                     LogicalLine(
@@ -244,51 +224,49 @@ def read_logical_lines(filepath: str) -> List[LogicalLine]:
                         raw_lines=[(line_num, raw_physical_line)],
                     )
                 )
-                continue  # Pasamos a la siguiente línea
+                continue  # Move to the next line
 
-            # 3. LÓGICA DE CÓDIGO (ACUMULACIÓN)
+            # 3. CODE LOGIC (ACCUMULATION)
 
-            #    Detección de Señales de Continuación (Current Line)
+            #    Continuation Signal Detection (Current Line)
 
-            # A) Señal F90: Ampersand al final
-            # (Esta señal mira "hacia adelante": Pido que la siguiente me continúe)
-            # Detectar si ESTA línea pide continuación F90 (Ampersand al final)
-            # Usamos el HELPER como solicitaste
+            # A) F90 Signal: Ampersand at end
+            # (This signal looks "forward": I request that the next line continues me)
+            # Detect whether THIS line requests F90 continuation (Ampersand at end)
             current_line_requests_continuation = has_continuation_char(raw_physical_line, format_type)
 
-            # Decisión de Fusión (Merge Decision)
-            # ¿Debemos unir esta línea al buffer existente?
-            # Solo si hay un buffer abierto Y (es cont F77 O la anterior pidió cont F90)
-            # ¿Unimos al buffer? Solo si hay buffer Y (es cont F77 O la anterior pidió cont F90)
+            # Merge Decision
+            # Should we merge this line into the existing buffer?
+            # Only if there is an open buffer AND (it is F77 continuation OR the previous requested F90 continuation)
             should_merge = False
-            if buffer_content:  # Solo puede ser continuación si ya hay algo empezado
+            if buffer_content:  # Can only be a continuation if something was started
                 if is_f77_continuation_mark or expecting_f90_continuation:
                     should_merge = True
 
-            # Ejecución de Acción
-            # Preparación del contenido
+            # Action Execution
+            # Content preparation
             processed_code = remove_continuation_chars(raw_physical_line, format_type)
 
-            # Ajuste extra para Fijo: Cortar las primeras 6 columnas si es código
+            # Extra adjustment for Fixed: Strip first 6 columns if code
             # if is_fixed_format and len(processed_code) >= 6:
             #     processed_code = processed_code[6:]
 
-            # Limpieza Extra: Quitar comentarios inline que quedaron
+            # Extra cleanup: Remove inline comments that remain
             processed_code = strip_inline_comment(processed_code)[0].strip()
 
             if should_merge:
-                # ACUMULAR en el buffer existente
+                # ACCUMULATE into existing buffer
                 buffer_content.append(processed_code.strip())
                 buffer_raw_lines.append((line_num, raw_physical_line))
 
             else:
-                # RUPTURA (FLUSH): Registrar lo anterior y empezar nuevo
+                # BREAK (FLUSH): Save previous and start new
 
-                # a) Si había un buffer previo, lo cerramos y guardamos
+                # a) If there was a previous buffer, close and save it
                 if buffer_content:
                     final_text = " ".join(buffer_content)
 
-                    # Etiqueta de la primera línea física del grupo
+                    # Label from the first physical line of the group
                     first_raw = buffer_raw_lines[0][1]
                     label = extract_label_from_line(first_raw, format_type) or ""
 
@@ -302,21 +280,21 @@ def read_logical_lines(filepath: str) -> List[LogicalLine]:
                         )
                     )
 
-                # b) Iniciar nuevo buffer con la línea actual
-                if processed_code:  # Solo si quedó algo de código (protección extra)
+                # b) Start new buffer with the current line
+                if processed_code:  # Only if code remains (extra protection)
                     logical_start_num = line_num
                     buffer_content = [processed_code.strip()]
                     buffer_raw_lines = [(line_num, raw_physical_line)]
                 else:
-                    # Si al limpiar no quedó nada (raro, pero posible si strip falló arriba), reset
+                    # If nothing remained after cleaning (rare, but possible if strip failed above), reset
                     buffer_content = []
                     buffer_raw_lines = []
 
-            # 5. Actualizar Estado para la próxima vuelta
-            # La "expectativa" para la siguiente línea depende de si ESTA línea terminó en &
+            # 5. Update State for the next iteration
+            # The "expectation" for the next line depends on whether THIS line ended in &
             expecting_f90_continuation = current_line_requests_continuation
 
-    # --- FLUSH FINAL (Al terminar el archivo) ---
+    # --- FINAL FLUSH (At end of file) ---
     if buffer_content:
         final_text = " ".join(buffer_content)
         first_raw = buffer_raw_lines[0][1]

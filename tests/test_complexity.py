@@ -1,6 +1,6 @@
 """
-test_complejidad.py
-Verifies reporte_complejidad.csv produced by complejidad.py.
+test_complexity.py
+Verifies report_complexity.csv produced by complexity.py.
 
 Expected CC values for key units in the fixtures corpus.
 """
@@ -13,7 +13,7 @@ RESULTS_DIR = Path(__file__).parent / "results"
 
 
 @pytest.fixture(scope="module")
-def complejidad(pipeline_results):
+def complexity(pipeline_results):
     return read_csv(pipeline_results / "report_complexity.csv")
 
 
@@ -21,50 +21,52 @@ def complejidad(pipeline_results):
 # Coverage
 # ---------------------------------------------------------------------------
 
-def test_all_units_have_cc(complejidad):
+
+def test_all_units_have_cc(complexity):
     """Every inventory unit must have a CC value."""
-    for row in complejidad:
-        assert row["CC"].strip() != "", f"Missing CC for {row.get('Nombre')}"
+    for row in complexity:
+        assert row["CC"].strip() != "", f"Missing CC for {row.get('Name')}"
 
 
 # ---------------------------------------------------------------------------
 # Specific CC values
 # ---------------------------------------------------------------------------
 
-def test_process_mesh_cc(complejidad):
+
+def test_process_mesh_cc(complexity):
     """process_mesh has 11 decision points → CC = 12."""
-    rows = rows_by(complejidad, Unidad="PROCESS_MESH")
+    rows = rows_by(complexity, Unit="PROCESS_MESH")
     assert len(rows) == 1
     assert int(rows[0]["CC"]) == 12
 
 
-def test_process_mesh_nivel(complejidad):
-    rows = rows_by(complejidad, Unidad="PROCESS_MESH")
+def test_process_mesh_level(complexity):
+    rows = rows_by(complexity, Unit="PROCESS_MESH")
     assert rows[0]["Level"].strip().upper() == "MEDIUM"
 
 
-def test_validate_grid_cc(complejidad):
+def test_validate_grid_cc(complexity):
     """validate_grid has ~6 decision points → CC = 6."""
-    rows = rows_by(complejidad, Unidad="VALIDATE_GRID")
+    rows = rows_by(complexity, Unit="VALIDATE_GRID")
     assert len(rows) == 1
     assert int(rows[0]["CC"]) == 6
 
 
-def test_validate_grid_nivel(complejidad):
-    rows = rows_by(complejidad, Unidad="VALIDATE_GRID")
+def test_validate_grid_level(complexity):
+    rows = rows_by(complexity, Unit="VALIDATE_GRID")
     assert rows[0]["Level"].strip().upper() == "LOW"
 
 
-def test_check_convergence_cc(complejidad):
+def test_check_convergence_cc(complexity):
     """check_convergence is purely sequential → CC = 1."""
-    rows = rows_by(complejidad, Unidad="CHECK_CONVERGENCE")
+    rows = rows_by(complexity, Unit="CHECK_CONVERGENCE")
     assert len(rows) == 1
     assert int(rows[0]["CC"]) == 1
 
 
-def test_ghost_routine_cc(complejidad):
+def test_ghost_routine_cc(complexity):
     """GHOST_ROUTINE has no branches → CC = 1."""
-    rows = rows_by(complejidad, Unidad="GHOST_ROUTINE")
+    rows = rows_by(complexity, Unit="GHOST_ROUTINE")
     assert len(rows) == 1
     assert int(rows[0]["CC"]) == 1
 
@@ -73,14 +75,15 @@ def test_ghost_routine_cc(complejidad):
 # Distribution
 # ---------------------------------------------------------------------------
 
-def test_media_tier_count(complejidad):
+
+def test_media_tier_count(complexity):
     """Only process_mesh reaches MEDIA tier."""
-    media = [r for r in complejidad if r["Level"].strip().upper() == "MEDIUM"]
-    assert len(media) == 1
-    assert media[0]["Unidad"].strip().upper() == "PROCESS_MESH"
+    medium = [r for r in complexity if r["Level"].strip().upper() == "MEDIUM"]
+    assert len(medium) == 1
+    assert medium[0]["Unit"].strip().upper() == "PROCESS_MESH"
 
 
-def test_no_critica_tier(complejidad):
+def test_no_critica_tier(complexity):
     """No unit in fixtures should reach CRITICAL (CC > 20)."""
-    critica = [r for r in complejidad if r["Level"].strip().upper() == "CRITICAL"]
-    assert len(critica) == 0
+    critical = [r for r in complexity if r["Level"].strip().upper() == "CRITICAL"]
+    assert len(critical) == 0

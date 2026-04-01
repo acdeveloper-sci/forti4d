@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict, Counter
 from typing import List, Dict, Set, Tuple
 
-# --- IMPORTACIÓN DE HERRAMIENTAS BASE ---
+# --- IMPORT OF BASE TOOLS ---
 try:
     from forti4d.lib.reader_logical import read_logical_lines
     from forti4d.lib.patterns_v1 import (
@@ -17,35 +17,35 @@ try:
         RE_INTERFACE,
     )
 except ImportError as e:
-    print(f"ERROR: Faltan archivos base (reader.py o patterns.py).\n{e}")
+    print(f"ERROR: Missing base files (reader.py or patterns.py).\n{e}")
     sys.exit(1)
 
 # =============================================================================
-# CONFIGURACIÓN Y CONSTANTES
+# CONFIGURATION AND CONSTANTS
 # =============================================================================
-from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.config import CODE_PATH, RESULTS_PATH
 
-ARCHIVO_INVENTARIO = RUTA_RESULTADOS / "inventory_report.csv"
+INVENTORY_FILE = RESULTS_PATH / "inventory_report.csv"
 
-# Archivos de Salida
-OUT_AMBIGUOS  = RUTA_RESULTADOS / "dep_00_ambiguities.csv"
-OUT_MAESTRO   = RUTA_RESULTADOS / "dep_01_master_data.csv"
-OUT_GRAFO     = RUTA_RESULTADOS / "dep_02_unit_graph.csv"
-OUT_IMPACTO   = RUTA_RESULTADOS / "dep_03_impact_matrix.csv"
-OUT_HUERFANOS = RUTA_RESULTADOS / "dep_04_external_orphans.csv"
-OUT_ARCHIVOS  = RUTA_RESULTADOS / "dep_05_file_dependencies.csv"
-OUT_INCLUDES  = RUTA_RESULTADOS / "dep_06_include_files.csv"
+# Output Files
+AMBIGUITIES_OUT = RESULTS_PATH / "dep_00_ambiguities.csv"
+MASTER_OUT = RESULTS_PATH / "dep_01_master_data.csv"
+GRAPH_OUT = RESULTS_PATH / "dep_02_unit_graph.csv"
+IMPACT_OUT = RESULTS_PATH / "dep_03_impact_matrix.csv"
+ORPHANS_OUT = RESULTS_PATH / "dep_04_external_orphans.csv"
+DEPENDS_OUT = RESULTS_PATH / "dep_05_file_dependencies.csv"
+INCLUDES_OUT = RESULTS_PATH / "dep_06_include_files.csv"
 
-# Jerarquía de Naturaleza (Menor índice = Más fuerte)
-RANKING_NATURALEZA = {
-    "ARQUITECTONICA": 1,  # USE
-    "FISICA": 2,  # INCLUDE
-    "OPERATIVA": 3,  # CALL, FUNCTION
+# Nature Hierarchy (Lower index = Stronger)
+NATURE_HIERARCHY = {
+    "ARCHITECTURAL": 1,  # USE
+    "PHYSICAL": 2,  # INCLUDE
+    "OPERATIONAL": 3,  # CALL, FUNCTION
     "UNKNOWN": 99,
 }
 
-# Listas de referencia
-INTRINSECAS = {
+# Reference lists
+INTRINSIC = {
     "ABS",
     "ACOS",
     "AIMAG",
@@ -211,10 +211,10 @@ KEYWORDS_IGNORE = {
     "NAMELIST",
 }
 
-# Regex Blindados
+# Hardened Regexes
 RE_USE = re.compile(r"^\s*use\b\s+(\w+)", re.IGNORECASE)
 RE_CALL = re.compile(r"^\s*call\b\s+(\w+)", re.IGNORECASE)
-# INCLUDE busca comillas. Ignora <...> de C.
+# INCLUDE looks for quotes. Ignores C-style <...>.
 RE_INCLUDE = re.compile(r"^\s*include\b\s+['\"]([^'\"]+)['\"]", re.IGNORECASE)
 RE_FUNC_CALL = re.compile(r"\b([a-zA-Z]\w*)\s*\(", re.IGNORECASE)
 
@@ -223,138 +223,130 @@ RE_END_MODULE = re.compile(r"^\s*end\s*module\b", re.IGNORECASE)
 RE_END_INTERFACE = re.compile(r"^\s*END\s*INTERFACE\b", re.IGNORECASE)
 
 # =============================================================================
-# FUNCIONES AUXILIARES
+# HELPER FUNCTIONS
 # =============================================================================
 
 
 def mask_strings(text: str) -> str:
-    """Reemplaza contenido de strings por '' para evitar falsos positivos."""
+    """Replaces string contents with '' to avoid false positives."""
     text = re.sub(r"'[^']*'", "''", text)
     text = re.sub(r'"[^"]*"', '""', text)
     return text
 
 
 def get_strongest_nature(nature_set: Set[str]) -> str:
-    """Devuelve la naturaleza más fuerte de un conjunto."""
+    """Returns the strongest nature from a set."""
     if not nature_set:
         return ""
-    # Ordenar por ranking
-    sorted_natures = sorted(nature_set, key=lambda x: RANKING_NATURALEZA.get(x, 99))
+    # Sort by ranking
+    sorted_natures = sorted(nature_set, key=lambda x: NATURE_HIERARCHY.get(x, 99))
     return sorted_natures[0]
 
 
 # =============================================================================
-# LÓGICA PRINCIPAL
+# MAIN LOGIC
 # =============================================================================
 
 
-def cargar_inventario(report_ambiguos=False) -> Tuple[Dict, Dict]:
+def load_inventory_enhanced(report_ambiguities=False) -> Tuple[Dict, Dict]:
     """
-    Carga inventario y detecta duplicados.
-    Retorna:
-      - inventory: {NOMBRE_UPPER: [ {archivo, tipo, padre, ...}, ... ]}
-      - file_map: {ARCHIVO: set(NOMBRES_UNIDADES_DEFINIDAS)}
-    Genera reporte de ambigüedades GLOBAL.
+    Loads inventory and detects duplicates.
+    Returns:
+      - inventory: {NOMBRE_UPPER: [ {file, type, parent, ...}, ... ]}
+      - file_map: {FILE: set(DEFINED_UNIT_NAMES)}
+    Generates a GLOBAL ambiguities report.
     """
     inventory = defaultdict(list)
-    file_map = defaultdict(set)  # Para saber qué define cada archivo rápido
+    file_map = defaultdict(set)  # Quick lookup of what each file defines
 
-    if not os.path.exists(ARCHIVO_INVENTARIO):
-        print(f"ERROR: No existe '{ARCHIVO_INVENTARIO}'. Ejecuta inventario.py primero.")
+    if not os.path.exists(INVENTORY_FILE):
+        print(f"ERROR: '{INVENTORY_FILE}' does not exist. Run inventory.py first.")
         sys.exit(1)
 
-    print("Cargando inventario...")
-    with open(ARCHIVO_INVENTARIO, "r", encoding="utf-8") as f:
+    print("Loading inventory...")
+    with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
         reader_csv = csv.DictReader(f)
         for row in reader_csv:
-            nombre = row.get("Name", "").strip().upper()
-            archivo = row.get("Archivo", "").strip()
-            tipo = row.get("Type", "").strip().upper()
-            # LEER EL PADRE (Si no existe columna, asume GLOBAL por compatibilidad)
-            padre = row.get("Parent", "GLOBAL").strip().upper()
+            name = row.get("Name", "").strip().upper()
+            file = row.get("File", "").strip()
+            utype = row.get("Type", "").strip().upper()
+            # READ THE PARENT (if column does not exist, assume GLOBAL for compatibility)
+            parent = row.get("Parent", "GLOBAL").strip().upper()
 
-            # Ajuste de nombre para Implicit Main en el Inventario (si aplica)
-            # Pero normalmente el inventario ya trae "IMPLICIT-MAIN".
-            # Aquí lo trataremos al resolver, o podemos pre-procesarlo.
+            # Name adjustment for Implicit Main in the Inventory (if applicable)
+            # Normally the inventory already carries "IMPLICIT-MAIN".
+            # We will handle it at resolution time, or we can pre-process it.
 
-            if nombre:
-                # Guardamos TODA la info necesaria para decidir luego
-                inventory[nombre].append(
+            if name:
+                # We save ALL the info needed to decide later
+                inventory[name].append(
                     {
-                        "archivo": archivo,
-                        "tipo": tipo,
-                        "padre": padre,
+                        "file": file,
+                        "type": utype,
+                        "parent": parent,
                     }
                 )
-                file_map[archivo].add(nombre)
+                file_map[file].add(name)
 
-    # Detección de Ambigüedades (Solo Informativo Global)
-    ambiguos_rows = []
+    # Ambiguity Detection (Global Informational Only)
+    ambiguous_rows = []
 
-    for nombre, occurrences in inventory.items():
+    for name, occurrences in inventory.items():
         if len(occurrences) > 1:
-            # Recopilamos todos los tipos distintos involucrados en la colisión
-            tipos_detectados = sorted(list(set(d["tipo"] for d in occurrences)))
-            tipo_reporte = "/".join(tipos_detectados)  # Ej: "SUBROUTINE/FUNCTION" o solo "SUBROUTINE"
+            # Collect all distinct types involved in the collision
+            detected_types = sorted(list(set(d["type"] for d in occurrences)))
+            report_type = "/".join(detected_types)  # e.g. "SUBROUTINE/FUNCTION" or just "SUBROUTINE"
 
-            # if len(tipos_detectados) == 1:
-            #     # Caso A: Duplicados físicos, pero coincidencia lógica (Ej: 2 Subrutinas iguales)
-            #     tipo_final = tipos_detectados[0]
-            # else:
-            #     # Caso B: Conflicto real (Ej: Subrutina vs Módulo)
-            #     # tipo_final = "AMBIGUOUS_TYPE (" + "/".join(tipos_detectados) + ")"
-            #     tipo_final = "AMBIGUOUS_TYPE"
-
-            # Guardar en reporte de ambigüedades con detalle
-            archivos_list = [d["archivo"] for d in occurrences]
-            ambiguos_rows.append(
+            # Save to ambiguity report with detail
+            file_list = [d["file"] for d in occurrences]
+            ambiguous_rows.append(
                 {
-                    "Unit_Name": nombre,
-                    "Type": tipo_reporte,
+                    "Unit_Name": name,
+                    "Type": report_type,
                     "Count": len(occurrences),
-                    "File_List": "; ".join(sorted(set(archivos_list))),
+                    "File_List": "; ".join(sorted(set(file_list))),
                 }
             )
 
-    # Guardar reporte de ambigüedades
-    if ambiguos_rows and report_ambiguos:
-        with open(OUT_AMBIGUOS, "w", newline="", encoding="utf-8") as f:
+    # Save ambiguity report
+    if ambiguous_rows and report_ambiguities:
+        with open(AMBIGUITIES_OUT, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=["Unit_Name", "Type", "Count", "File_List"])
             w.writeheader()
-            w.writerows(ambiguos_rows)
-        print(f"  -> Detectadas {len(ambiguos_rows)} unidades ambiguas (ver {OUT_AMBIGUOS})")
+            w.writerows(ambiguous_rows)
+        print(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {AMBIGUITIES_OUT})")
 
-    # Retornamos 'inventory' tal cual (lista de candidatos) para que la resolución decida
+    # Return 'inventory' as-is (list of candidates) so resolution can decide
     return inventory, file_map
 
 
-def scan_file(ruta_archivo: Path) -> List[Dict]:
+def scan_file(file_path: Path) -> List[Dict]:
     """
-    Escanea un archivo y retorna lista de dependencias crudas.
-    Escanea dependencias rastreando el Scope (Padre) del llamador.
+    Scans a file and returns a list of raw dependencies.
+    Scans dependencies while tracking the Scope (Parent) of the caller.
     """
     raw_deps = []
 
     try:
-        logical_lines = read_logical_lines(str(ruta_archivo))
+        logical_lines = read_logical_lines(str(file_path))
     except Exception as e:
-        print(f"Error leyendo {ruta_archivo.name}: {e}")
+        print(f"Error reading {file_path.name}: {e}")
         return []
 
-    # Nombre base para unidades implícitas
-    # REGLA: IMPLICIT-MAIN se convierte en "MAIN__nombrearchivo.f"
-    file_main_name = f"MAIN__{ruta_archivo.name}"
+    # Base name for implicit units
+    # RULE: IMPLICIT-MAIN becomes "MAIN__filename.f"
+    file_main_name = f"MAIN__{file_path.name}"
 
-    # Estado inicial
+    # Initial state
     current_unit_name = file_main_name
     current_unit_type = "IMPLICIT-MAIN"
 
-    # RASTREO DE SCOPE (PADRE)
-    # Si entramos a un MODULE, current_scope se vuelve el nombre del módulo.
-    # Las subrutinas dentro heredarán ese scope.
+    # SCOPE TRACKING (PARENT)
+    # When we enter a MODULE, current_scope becomes the module name.
+    # Subroutines inside will inherit that scope.
     current_scope = "GLOBAL"
 
-    # Estados de Control
+    # Control States
     inside_interface = False
     current_is_recursive = False
 
@@ -366,31 +358,31 @@ def scan_file(ruta_archivo: Path) -> List[Dict]:
         line_num = lline.start_line
         text_safe = mask_strings(text_raw)
 
-        # --- LÓGICA DE INTERFACE (CRÍTICO PARA EVITAR FALSOS POSITIVOS) ---
+        # --- INTERFACE LOGIC (CRITICAL TO AVOID FALSE POSITIVES) ---
 
-        # ¿Empieza una interfaz?
+        # Does an interface start?
         if RE_INTERFACE.match(text_safe):
             inside_interface = True
-            continue  # Saltamos, no queremos analizar lo de adentro
+            continue  # Skip — we do not want to analyze the interior
 
-        # ¿Termina una interfaz?
+        # Does an interface end?
         if RE_END_INTERFACE.match(text_safe):
             inside_interface = False
             continue
 
-        # Si estamos dentro, IGNORAR TODO (Para no cambiar current_unit_name falsamente)
+        # If we are inside, IGNORE EVERYTHING (to avoid falsely changing current_unit_name)
         if inside_interface:
             continue
 
         # ------------------------------------------------------------------
 
-        # 0. DETECTAR CIERRE DE MÓDULO (Para resetear scope)
+        # 0. DETECT MODULE CLOSE (to reset scope)
         if RE_END_MODULE.match(text_safe):
             current_scope = "GLOBAL"
-            # (Opcional: Podríamos resetear current_unit_name, pero el siguiente header lo hará)
+            # (Optional: we could reset current_unit_name, but the next header will do it)
             continue
 
-        # 1. DETECTAR CAMBIO DE UNIDAD
+        # 1. DETECT UNIT CHANGE
         m_prog = RE_PROGRAM.match(text_safe)
         m_mod = RE_MODULE.match(text_safe)
         m_sub = RE_SUBROUTINE.match(text_safe)
@@ -405,115 +397,115 @@ def scan_file(ruta_archivo: Path) -> List[Dict]:
         elif m_mod:
             current_unit_name = m_mod.group(1).upper()
             current_unit_type = "MODULE"
-            current_scope = current_unit_name  # ¡El módulo se convierte en el Scope!
+            current_scope = current_unit_name  # The module becomes the Scope!
             is_header = True
         elif m_sub:
             current_unit_name = m_sub.group(1).upper()
             current_unit_type = "SUBROUTINE"
-            # Si estamos dentro de un módulo (current_scope != GLOBAL), esta subrutina pertenece a él.
-            # Si current_scope es GLOBAL, es una subrutina externa normal.
-            # Chequeamos si la palabra RECURSIVE está en la definición
+            # If we are inside a module (current_scope != GLOBAL), this subroutine belongs to it.
+            # If current_scope is GLOBAL, it is a normal external subroutine.
+            # Check if the word RECURSIVE is in the definition
             current_is_recursive = "RECURSIVE" in text_safe.upper()
             is_header = True
         elif m_func:
             current_unit_name = m_func.group(1).upper()
             current_unit_type = "FUNCTION"
-            # Chequeamos si la palabra RECURSIVE está en la definición
+            # Check if the word RECURSIVE is in the definition
             current_is_recursive = "RECURSIVE" in text_safe.upper()
             is_header = True
 
         if is_header:
             continue
 
-        # 2. CAPTURAR DEPENDENCIAS (Pasamos source_parent = current_scope)
+        # 2. CAPTURE DEPENDENCIES (we pass source_parent = current_scope)
 
-        # INCLUDE (Física) - Usa text_raw
+        # INCLUDE (Physical) - Uses text_raw
         m_inc = RE_INCLUDE.match(text_raw)
         if m_inc:
             target = m_inc.group(1)
             raw_deps.append(
                 {
-                    "source_file": ruta_archivo.name,
+                    "source_file": file_path.name,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
                     "dep_type": "INCLUDE",
                     "target_raw": target,
                     "line": line_num,
-                    "nature": "FISICA",
+                    "nature": "PHYSICAL",
                 }
             )
             continue
 
-        # USE (Arquitectónica) - Usa text_safe
+        # USE (Architectural) - Uses text_safe
         m_use = RE_USE.match(text_safe)
         if m_use:
             target = m_use.group(1).upper()
             raw_deps.append(
                 {
-                    "source_file": ruta_archivo.name,
+                    "source_file": file_path.name,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
                     "dep_type": "USE",
                     "target_raw": target,
                     "line": line_num,
-                    "nature": "ARQUITECTONICA",
+                    "nature": "ARCHITECTURAL",
                 }
             )
             continue
 
-        # CALL (Operativa) - Usa text_safe
+        # CALL (Operative) - Uses text_safe
         m_call = RE_CALL.match(text_safe)
         if m_call:
             target = m_call.group(1).upper()
 
-            # Filtro de Recursividad para CALL (raro en subrutinas, pero posible)
+            # Recursion filter for CALL (rare in subroutines but possible)
             if target == current_unit_name and not current_is_recursive:
                 continue
 
             raw_deps.append(
                 {
-                    "source_file": ruta_archivo.name,
+                    "source_file": file_path.name,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
                     "dep_type": "CALL",
                     "target_raw": target,
                     "line": line_num,
-                    "nature": "OPERATIVA",
+                    "nature": "OPERATIONAL",
                 }
             )
             # No continue
 
-        # FUNCTION CALL (Operativa) - Usa text_safe
+        # FUNCTION CALL (Operative) - Uses text_safe
         candidates = RE_FUNC_CALL.findall(text_safe)
         for cand in candidates:
             cand_upper = cand.upper()
             if cand_upper in KEYWORDS_IGNORE:
                 continue
-            if cand_upper in INTRINSECAS:
+            if cand_upper in INTRINSIC:
                 continue
-            if m_call and m_call.group(1).upper() == cand_upper:  # verifica si es un CALL <nombre>
+            if m_call and m_call.group(1).upper() == cand_upper:  # check if it is a CALL <name>
                 continue
 
-            # RECURSIVIDAD
+            # RECURSION
             if cand_upper == current_unit_name:
                 if not current_is_recursive:
-                    # Es acceso a array de retorno, no llamada recursiva
+                    # Access to return array, not a recursive call
                     continue
 
-            # Lo agregamos como candidato. La resolución determinará si es array o función.
+            # We add it as a candidate. Resolution will determine if it is an array or function.
             raw_deps.append(
                 {
-                    "source_file": ruta_archivo.name,
+                    "source_file": file_path.name,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
                     "dep_type": "FUNC_CALL",
                     "target_raw": cand_upper,
                     "line": line_num,
-                    "nature": "OPERATIVA",
+                    "nature": "OPERATIONAL",
                 }
             )
 
@@ -521,130 +513,130 @@ def scan_file(ruta_archivo: Path) -> List[Dict]:
 
 
 def main():
-    RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
-    # 1. Cargar datos base
-    inventory, _ = cargar_inventario(report_ambiguos=True)
-    path_fuente = CARPETA_CODIGO
+    # 1. Load base data
+    inventory, _ = load_inventory_enhanced(report_ambiguities=True)
+    source_path = CODE_PATH
 
-    # 2. Escanear Archivos
-    archivos = sorted([f for f in path_fuente.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
-    print(f"Analizando {len(archivos)} archivos...")
+    # 2. Scan Files
+    files = sorted([f for f in source_path.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
+    print(f"Analyzing {len(files)} files...")
 
     all_raw_deps = []
-    for f in archivos:
+    for f in files:
         # print(f"  Scanning: {f.name}")
         all_raw_deps.extend(scan_file(f))
 
-    # 3. Resolución y Cruzamiento
+    # 3. Resolution and Cross-matching
     master_rows = []
-    huerfanos_set = set()
+    orphans_set = set()
 
-    # Estructuras para reportes agregados
+    # Structures for aggregated reports
     dest_file_map = defaultdict(list)
     graph_edges = set()  # (UnitA, TypeA, UnitB, TypeB, DepType)
     edges_counter = Counter()
     impact_fan_out = Counter()
     impact_fan_in = Counter()
 
-    # Estructura para reporte de archivos
+    # Structure for file-level report
     # {(FileSrc, FileDest): set(Nature)}
     file_deps_map = defaultdict(set)
-    file_deps_details = defaultdict(set)  # Para listar tipos de dep (USE, CALL...)
+    file_deps_details = defaultdict(set)  # To list dep types (USE, CALL...)
 
-    print("Resolviendo dependencias con Scope...")
+    print("Resolving dependencies with Scope...")
 
     for item in all_raw_deps:
         target = item["target_raw"]
         dtype = item["dep_type"]
 
-        # Contexto del Llamador
+        # Caller Context
         source_parent = item.get("source_parent", "GLOBAL")
 
-        # Resolución del Destino
+        # Destination Resolution
         dest_file = None
         dest_type = "UNKNOWN"
-        dest_unit = target  # Por defecto el nombre raw
+        dest_unit = target  # Default to the raw name
 
         if dtype == "INCLUDE":
-            # Include es especial, el target es un archivo
+            # Include is special, the target is a file
             dest_file = target
             dest_type = "FILE"
             # Verificar existencia
-            if not (CARPETA_CODIGO / target).exists():
+            if not (CODE_PATH / target).exists():
                 dest_file = "MISSING_FILE"
 
         else:
-            # Buscar candidatos en inventario
+            # Look for candidates in inventory
             candidates = inventory.get(target)
 
             if not candidates:
-                # NO ENCONTRADO
+                # NOT FOUND
                 dest_file = None
                 if dtype == "FUNC_CALL":
-                    continue  # Ignorar arrays/funciones no inventariadas
+                    continue  # Ignore non-inventoried arrays/functions
             else:
-                # ESTRATEGIA DE RESOLUCIÓN DE SCOPE
+                # SCOPE RESOLUTION STRATEGY
                 match = None
 
-                # 1. Prioridad: Scope Hermano/Interno (Mismo Padre)
-                # Si area_square llama a area, y ambos son hijos de mod_calc.
-                internal_matches = [c for c in candidates if c["padre"] == source_parent and source_parent != "GLOBAL"]
+                # 1. Priority: Sibling/Internal Scope (Same Parent)
+                # e.g., area_square calls area, and both are children of mod_calc.
+                internal_matches = [c for c in candidates if c["parent"] == source_parent and source_parent != "GLOBAL"]
 
                 if internal_matches:
-                    match = internal_matches[0]  # ¡Encontrado internamente!
+                    match = internal_matches[0]  # Found internally!
                 else:
-                    # 2. Scope Global
-                    global_matches = [c for c in candidates if c["padre"] == "GLOBAL"]
+                    # 2. Global Scope
+                    global_matches = [c for c in candidates if c["parent"] == "GLOBAL"]
                     if global_matches:
                         match = global_matches[0]
                     else:
-                        # 3. Scope Externo (Otro Módulo)
-                        # Aquí hay ambigüedad si hay varios módulos con el mismo nombre (raro en código válido)
-                        # Si solo hay uno, asumimos que se importó vía USE (aunque no validemos el USE explícito aun)
+                        # 3. External Scope (Another Module)
+                        # Ambiguity arises if there are several modules with the same name (rare in valid code)
+                        # If there is only one, we assume it was imported via USE (even if we do not validate USE explicitly yet)
                         if len(candidates) == 1:
                             match = candidates[0]
                         else:
-                            # Conflicto Real: Existe en mod_A y mod_B, y no sé cuál usas.
+                            # Real Conflict: Exists in mod_A and mod_B, and it is unclear which one is used.
                             dest_file = "MULTIPLE_CANDIDATES"
 
-                            # Recuperamos los tipos para reportar algo útil (ej: SUBROUTINE)
-                            tipos = sorted(list(set(c["tipo"] for c in candidates)))
-                            if len(tipos) == 1:
-                                dest_type = tipos[0]
+                            # Recover types to report something useful (e.g. SUBROUTINE)
+                            types = sorted(list(set(c["type"] for c in candidates)))
+                            if len(types) == 1:
+                                dest_type = types[0]
                             else:
                                 dest_type = "AMBIGUOUS_TYPE"
 
                 if match:
-                    dest_file = match["archivo"]
-                    dest_type = match["tipo"]
+                    dest_file = match["file"]
+                    dest_type = match["type"]
 
-        # Si llegamos aquí, es una dependencia relevante (o un huerfano confirmado USE/CALL)
+        # If we reach here, it is a relevant dependency (or a confirmed USE/CALL orphan)
 
-        # Registrar Huérfano real
+        # Register real Orphan
         if dest_file is None:
             dest_file = "EXTERNAL_OR_MISSING"
             dest_type = "EXTERNAL"
-            huerfanos_set.add((target, dtype))
+            orphans_set.add((target, dtype))
 
-        # --- Agregar a Maestro ---
+        # --- Add to Master ---
         master_rows.append(
             {
-                "Archivo_Origen": item["source_file"],
-                "Unidad_Origen": item["source_unit"],
-                "Tipo_Unidad_Origen": item["source_type"],
-                "Tipo_Dep": dtype,
-                "Unidad_Destino": dest_unit,
-                "Tipo_Unidad_Destino": dest_type,
-                "Archivo_Destino": dest_file,
-                "Linea_Origen": item["line"],
+                "Source_File": item["source_file"],
+                "Source_Unit": item["source_unit"],
+                "Source_Type": item["source_type"],
+                "Dep_Type": dtype,
+                "Target_Unit": dest_unit,
+                "Target_Type": dest_type,
+                "Target_File": dest_file,
+                "Source_Line": item["line"],
             }
         )
 
-        # --- Agregar a Grafo y Matriz Impacto (Solo internas resueltas) ---
+        # --- Add to Graph and Impact Matrix (Only resolved internal ones) ---
         if dest_file and dest_file not in ("MULTIPLE_CANDIDATES", "EXTERNAL_OR_MISSING", "MISSING_FILE"):
             # Grafo
-            dest_files = "; ".join(sorted(set(inv["archivo"] for inv in inventory.get(dest_unit, []))))
+            dest_files = "; ".join(sorted(set(inv["file"] for inv in inventory.get(dest_unit, []))))
             graph_edges.add((item["source_unit"], item["source_type"], dest_unit, dest_type, dtype, dest_files))
             key = (item["source_unit"], dest_unit, item["source_type"], dest_type)
             edges_counter[key] += 1
@@ -653,35 +645,35 @@ def main():
             impact_fan_out[item["source_unit"]] += 1
             impact_fan_in[dest_unit] += 1
 
-            # Dependencia de Archivos (Solo si son distintos)
+            # File Dependency (Only if they are different)
             if item["source_file"] != dest_file:
                 pair = (item["source_file"], dest_file)
                 file_deps_map[pair].add(item["nature"])
                 file_deps_details[pair].add(dtype)
 
-    # 4. Generación de Archivos CSV
+    # 4. CSV File Generation
 
-    # A. Maestro
+    # A. Master
     if master_rows:
         keys = [
-            "Archivo_Origen",
-            "Unidad_Origen",
-            "Tipo_Unidad_Origen",
-            "Tipo_Dep",
-            "Unidad_Destino",
-            "Tipo_Unidad_Destino",
-            "Archivo_Destino",
-            "Linea_Origen",
+            "Source_File",
+            "Source_Unit",
+            "Source_Type",
+            "Dep_Type",
+            "Target_Unit",
+            "Target_Type",
+            "Target_File",
+            "Source_Line",
         ]
-        with open(OUT_MAESTRO, "w", newline="", encoding="utf-8") as f:
+        with open(MASTER_OUT, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(master_rows)
-        print(f"Generado: {OUT_MAESTRO}")
+        print(f"Generated:{MASTER_OUT}")
 
-    # B. Grafo Unidades
+    # B. Units Graph
     if graph_edges:
-        with open(OUT_GRAFO, "w", newline="", encoding="utf-8") as f:
+        with open(GRAPH_OUT, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(
                 [
@@ -697,74 +689,60 @@ def main():
             for row in sorted(list(graph_edges)):
                 # (source_unit, dest_unit, source_type, dest_type)
                 key = (row[0], row[2], row[1], row[3])
-                peso = edges_counter[key]
-                rowt = row + (peso,)
+                weight = edges_counter[key]
+                rowt = row + (weight,)
                 w.writerow(rowt)
-        print(f"Generado: {OUT_GRAFO}")
+        print(f"Generated:{GRAPH_OUT}")
 
-    # C. Matriz Impacto
+    # C. Impact Matrix
     all_units = set(impact_fan_out.keys()) | set(impact_fan_in.keys())
     if all_units:
-        # Recuperar tipos para la matriz (buscando en inventory o inferido)
+        # Recover types for the matrix (looking up in inventory or inferred)
         rows_impact = []
         for u in sorted(all_units):
-            # Tipo? Buscamos en inventario. Si no, quizas es Implicit Main
-            tipo = "UNKNOWN"
-            archivo = "N/A"
+            # Type? Look up in inventory. If not found, it may be an Implicit Main
+            utype = "UNKNOWN"
+            file = "N/A"
 
             if u.startswith("MAIN__"):
-                tipo_reporte = "IMPLICIT-MAIN"
-                # Opcional: intentar recuperar el nombre del archivo del string MAIN__
-                archivos_reporte = u.replace("MAIN__", "")
+                report_type = "IMPLICIT-MAIN"
+                # Optional: try to recover the filename from the MAIN__ string
+                files_report = u.replace("MAIN__", "")
             else:
                 candidates = inventory.get(u)  # Esto devuelve una LISTA o None
                 if candidates:
-                    # Tomamos el primero para sacar el Tipo
-                    # first = candidates[0]
-                    # tipo = first["tipo"]
+                    detected_types = sorted(list(set(d["type"] for d in candidates)))
+                    report_type = "/".join(detected_types)
 
-                    # Determinamos el archivo
-                    # if len(candidates) > 1:
-                    #     archivo = "MULTIPLE_CANDIDATES"
-                    # else:
-                    #     archivo = first["archivo"]
-
-                    tipos_detectados = sorted(list(set(d["tipo"] for d in candidates)))
-                    tipo_reporte = "/".join(tipos_detectados)
-
-                    archivos_list = [d["archivo"] for d in candidates]
-                    archivos_reporte = "; ".join(sorted(set(archivos_list)))
-                    # if len(candidates) > 1:
-                    #     archivos_reporte = "MULTIPLE_CANDIDATES"
-                    # else:
-                    #     archivos_reporte = archivos_list[0]
+                    files_list = [d["file"] for d in candidates]
+                    files_report = "; ".join(sorted(set(files_list)))
 
             rows_impact.append(
                 {
                     "Unit": u,
-                    "Type": tipo_reporte,
-                    "Archivo": archivos_reporte,
+                    "Type": report_type,
+                    "File": files_report,
                     "Fan_Out": impact_fan_out.get(u, 0),
                     "Fan_In": impact_fan_in.get(u, 0),
                 }
             )
 
-        with open(OUT_IMPACTO, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Unit", "Type", "Archivo", "Fan_Out", "Fan_In"])
+        with open(IMPACT_OUT, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["Unit", "Type", "File", "Fan_Out", "Fan_In"])
             w.writeheader()
             w.writerows(rows_impact)
-        print(f"Generado: {OUT_IMPACTO}")
+        print(f"Generated:{IMPACT_OUT}")
 
-    # D. Huérfanos
-    if huerfanos_set:
-        with open(OUT_HUERFANOS, "w", newline="", encoding="utf-8") as f:
+    # D. Orphans
+    if orphans_set:
+        with open(ORPHANS_OUT, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["Target_Unit", "Dep_Type", "Status"])
-            for u, t in sorted(list(huerfanos_set)):
+            for u, t in sorted(list(orphans_set)):
                 w.writerow([u, t, "EXTERNAL_OR_LIBRARY"])
-        print(f"Generado: {OUT_HUERFANOS}")
+        print(f"Generated:{ORPHANS_OUT}")
 
-    # E. Dependencia de Archivos
+    # E. File Dependencies
     if file_deps_map:
         file_rows = []
         for (src, dst), natures in file_deps_map.items():
@@ -774,20 +752,20 @@ def main():
 
             file_rows.append(
                 {
-                    "Archivo_Origen": src,
-                    "Archivo_Destino": dst,
-                    "Naturaleza_Fuerte": strongest,
-                    "Lista_Naturalezas": all_nats,
-                    "Detalle_Tipos": details,
+                    "Source_File": src,
+                    "Target_File": dst,
+                    "Strong_Nature": strongest,
+                    "Nature_List": all_nats,
+                    "Detail_Types": details,
                 }
             )
 
-        with open(OUT_ARCHIVOS, "w", newline="", encoding="utf-8") as f:
-            keys = ["Archivo_Origen", "Archivo_Destino", "Naturaleza_Fuerte", "Lista_Naturalezas", "Detalle_Tipos"]
+        with open(DEPENDS_OUT, "w", newline="", encoding="utf-8") as f:
+            keys = ["Source_File", "Target_File", "Strong_Nature", "Nature_List", "Detail_Types"]
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(file_rows)
-        print(f"Generado: {OUT_ARCHIVOS}")
+        print(f"Generated:{DEPENDS_OUT}")
 
         # dep_06: INCLUDE file references — one row per INCLUDE statement
         include_rows = []
@@ -800,21 +778,23 @@ def main():
             if key in seen_includes:
                 continue
             seen_includes.add(key)
-            estado = "PRESENT" if (CARPETA_CODIGO / target).exists() else "MISSING"
-            include_rows.append({
-                "Source_File":    item["source_file"],
-                "Source_Unit":    item["source_unit"],
-                "Included_File":  target,
-                "Status":         estado,
-            })
+            estado = "PRESENT" if (CODE_PATH / target).exists() else "MISSING"
+            include_rows.append(
+                {
+                    "Source_File": item["source_file"],
+                    "Source_Unit": item["source_unit"],
+                    "Included_File": target,
+                    "Status": estado,
+                }
+            )
         include_rows.sort(key=lambda r: (r["Source_File"], r["Source_Unit"]))
 
-        with open(OUT_INCLUDES, "w", newline="", encoding="utf-8") as f:
+        with open(INCLUDES_OUT, "w", newline="", encoding="utf-8") as f:
             keys = ["Source_File", "Source_Unit", "Included_File", "Status"]
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(include_rows)
-        print(f"Generado: {OUT_INCLUDES} ({len(include_rows)} referencias INCLUDE)")
+        print(f"Generated: {INCLUDES_OUT} ({len(include_rows)} INCLUDE references)")
 
 
 if __name__ == "__main__":

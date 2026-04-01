@@ -20,61 +20,63 @@ RESULTS_DIR = Path(__file__).parent / "results"
 # dep_00 — Ambiguous units (same name in multiple files)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
-def ambiguedades(pipeline_results):
+def ambiguities(pipeline_results):
     return read_csv(pipeline_results / "dep_00_ambiguities.csv")
 
 
-def test_ambiguous_unit_count(ambiguedades):
+def test_ambiguous_unit_count(ambiguities):
     """6 units share names across utils.f90 and utils_copy.f90."""
-    assert len(ambiguedades) == 6
+    assert len(ambiguities) == 6
 
 
-def test_utils_mod_is_ambiguous(ambiguedades):
-    rows = rows_by(ambiguedades, Unit_Name="UTILS_MOD")
+def test_utils_mod_is_ambiguous(ambiguities):
+    rows = rows_by(ambiguities, Unit_Name="UTILS_MOD")
     assert len(rows) == 1
     assert int(rows[0]["Count"]) == 2
 
 
-def test_ambiguous_units_are_from_utils_files(ambiguedades):
-    for row in ambiguedades:
-        archivos = row["File_List"]
-        assert "utils.f90" in archivos or "utils_copy.f90" in archivos
+def test_ambiguous_units_are_from_utils_files(ambiguities):
+    for row in ambiguities:
+        files = row["File_List"]
+        assert "utils.f90" in files or "utils_copy.f90" in files
 
 
 # ---------------------------------------------------------------------------
 # dep_03 — Fan-in / Fan-out
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
-def impacto(pipeline_results):
+def impact(pipeline_results):
     return read_csv(pipeline_results / "dep_03_impact_matrix.csv")
 
 
-def test_shared_routine_fan_in(impacto):
+def test_shared_routine_fan_in(impact):
     """SHARED_ROUTINE is called from dead_test and implicit_run → fan-in = 2."""
-    rows = rows_by(impacto, Unit="SHARED_ROUTINE")
+    rows = rows_by(impact, Unit="SHARED_ROUTINE")
     assert len(rows) == 1
     assert int(rows[0]["Fan_In"]) == 2
 
 
-def test_solver_main_fan_out(impacto):
+def test_solver_main_fan_out(impact):
     """solver_main calls validate_grid, compute_step, check_convergence, export_vtk_mesh."""
-    rows = rows_by(impacto, Unit="SOLVER_MAIN")
+    rows = rows_by(impact, Unit="SOLVER_MAIN")
     assert len(rows) == 1
     assert int(rows[0]["Fan_Out"]) == 4
 
 
-def test_validate_grid_fan_in(impacto):
+def test_validate_grid_fan_in(impact):
     """validate_grid is called only from solver_main → fan-in = 1."""
-    rows = rows_by(impacto, Unit="VALIDATE_GRID")
+    rows = rows_by(impact, Unit="VALIDATE_GRID")
     assert len(rows) == 1
     assert int(rows[0]["Fan_In"]) == 1
 
 
-def test_dead_test_fan_out(impacto):
+def test_dead_test_fan_out(impact):
     """dead_test calls SHARED_ROUTINE → fan-out = 1."""
-    rows = rows_by(impacto, Unit="DEAD_TEST")
+    rows = rows_by(impact, Unit="DEAD_TEST")
     assert len(rows) == 1
     assert int(rows[0]["Fan_Out"]) == 1
 
@@ -83,29 +85,31 @@ def test_dead_test_fan_out(impacto):
 # dep_04 — External / orphan references
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
-def externos(pipeline_results):
+def externals(pipeline_results):
     return read_csv(pipeline_results / "dep_04_external_orphans.csv")
 
 
-def test_external_orphans_count(externos):
+def test_external_orphans_count(externals):
     """TIMER_C and EXPORT_VTK_MESH are called but not defined anywhere."""
-    assert len(externos) == 2
+    assert len(externals) == 2
 
 
-def test_timer_c_is_external(externos):
-    names = {r["Target_Unit"].strip().upper() for r in externos}
+def test_timer_c_is_external(externals):
+    names = {r["Target_Unit"].strip().upper() for r in externals}
     assert "TIMER_C" in names
 
 
-def test_export_vtk_mesh_is_external(externos):
-    names = {r["Target_Unit"].strip().upper() for r in externos}
+def test_export_vtk_mesh_is_external(externals):
+    names = {r["Target_Unit"].strip().upper() for r in externals}
     assert "EXPORT_VTK_MESH" in names
 
 
 # ---------------------------------------------------------------------------
 # dep_06 — INCLUDE directives
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def includes(pipeline_results):

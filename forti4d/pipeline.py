@@ -6,9 +6,9 @@ Usage:
   python pipeline.py                                      # run all steps
   python pipeline.py --list                               # show available steps
   python pipeline.py --project ../myproject --output out/ # set source and output dirs
-  python pipeline.py --from complejidad                   # start from a specific step
-  python pipeline.py --only sloc consolidar               # run only these steps
-  python pipeline.py --skip grafo_visual                  # skip specific steps
+  python pipeline.py --from complexity                    # start from a specific step
+  python pipeline.py --only sloc consolidate              # run only these steps
+  python pipeline.py --skip visual_graph                  # skip specific steps
   python pipeline.py --continue-on-error                  # don't stop on first failure
   python pipeline.py --quiet                              # only show step names and results
 """
@@ -29,25 +29,25 @@ from pathlib import Path
 _HERE = Path(__file__).parent
 
 STEPS = [
-    ("inventario",          "analyzers/inventario.py",          "Build unit inventory from source files"),
-    ("dependencias",        "analyzers/dependencias.py",         "Build call graph and compute Fan-In/Fan-Out"),
-    ("perfilador",          "analyzers/perfilador.py",           "Classify statements and produce audit/ DEBUG files"),
-    ("bloques",             None,                                "Block topology analysis (one file per source, to output/)"),
-    ("analisis_estructura", "analyzers/analisis_estructura.py",  "Classify files by architectural role"),
-    ("analisis_cruzado",    "analyzers/analisis_cruzado.py",     "Assign migration strategy per unit"),
-    ("resumen_ejecutivo",   "analyzers/resumen_ejecutivo.py",    "Generate executive summary"),
-    ("complejidad",         "analyzers/complejidad.py",          "Compute McCabe cyclomatic complexity"),
-    ("common_blocks",       "analyzers/common_blocks.py",        "Detect COMMON block coupling"),
-    ("simbolos",            "analyzers/simbolos.py",             "Extract variable/parameter/implicit symbols per unit"),
-    ("tipos_derivados",     "analyzers/tipos_derivados.py",      "Extract derived TYPE definitions and their components"),
-    ("equivalencias",       "analyzers/equivalencias.py",        "Detect EQUIVALENCE aliasing groups (union-find)"),
-    ("alcanzabilidad",      "analyzers/alcanzabilidad.py",       "Dead code detection from entry points"),
-    ("sloc",                "analyzers/sloc.py",                 "Precise SLOC count per unit"),
-    ("clones",              "analyzers/clones.py",               "Detect identical/similar/diverged duplicate units"),
-    ("consolidar",          "analyzers/consolidar.py",           "Join all reports into reporte_consolidado.csv"),
-    ("grafo_visual",        "analyzers/grafo_visual.py",         "Generate call graph DOT files"),
-    ("priorizacion",        "analyzers/priorizacion.py",         "Compute composite risk score and rank units for migration"),
-    ("reporte_html",        "analyzers/reporte_html.py",         "Generate self-contained HTML report"),
+    ("inventory", "analyzers/inventory.py", "Build unit inventory from source files"),
+    ("dependencies", "analyzers/dependencies.py", "Build call graph and compute Fan-In/Fan-Out"),
+    ("profiler", "analyzers/profiler.py", "Classify statements and produce audit/ DEBUG files"),
+    ("blocks", None, "Block topology analysis (one file per source, to output/)"),
+    ("structure_analysis", "analyzers/structure_analysis.py", "Classify files by architectural role"),
+    ("cross_analysis", "analyzers/cross_analysis.py", "Assign migration strategy per unit"),
+    ("executive_summary", "analyzers/executive_summary.py", "Generate executive summary"),
+    ("complexity", "analyzers/complexity.py", "Compute McCabe cyclomatic complexity"),
+    ("common_blocks", "analyzers/common_blocks.py", "Detect COMMON block coupling"),
+    ("symbols", "analyzers/symbols.py", "Extract variable/parameter/implicit symbols per unit"),
+    ("derived_types", "analyzers/derived_types.py", "Extract derived TYPE definitions and their components"),
+    ("equivalences", "analyzers/equivalences.py", "Detect EQUIVALENCE aliasing groups (union-find)"),
+    ("reachability", "analyzers/reachability.py", "Dead code detection from entry points"),
+    ("sloc", "analyzers/sloc.py", "Precise SLOC count per unit"),
+    ("clones", "analyzers/clones.py", "Detect identical/similar/diverged duplicate units"),
+    ("consolidate", "analyzers/consolidate.py", "Join all reports into report_consolidated.csv"),
+    ("visual_graph", "analyzers/visual_graph.py", "Generate call graph DOT files"),
+    ("prioritization", "analyzers/prioritization.py", "Compute composite risk score and rank units for migration"),
+    ("html_report", "analyzers/html_report.py", "Generate self-contained HTML report"),
 ]
 
 STEP_NAMES = [s[0] for s in STEPS]
@@ -57,13 +57,14 @@ STEP_NAMES = [s[0] for s in STEPS]
 # STEP RUNNERS
 # =============================================================================
 
+
 def run_script(script: str, quiet: bool, env: dict) -> tuple:
     """
     Runs a Python script as a subprocess.
     Returns (success: bool, elapsed: float, output: str).
     """
     cmd = [sys.executable, str(_HERE / script)]
-    t0  = time.time()
+    t0 = time.time()
 
     if quiet:
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
@@ -76,47 +77,47 @@ def run_script(script: str, quiet: bool, env: dict) -> tuple:
     return result.returncode == 0, elapsed, output
 
 
-def run_bloques(quiet: bool, env: dict) -> tuple:
+def run_blocks(quiet: bool, env: dict) -> tuple:
     """
-    Batch-runs analisis_bloques_v8.py for every *_DEBUG.csv in <output>/audit/.
-    Output is written to <output>/bloques/<name>_bloques.txt.
+    Batch-runs block_analysis.py for every *_DEBUG.csv in <output>/audit/.
+    Output is written to <output>/blocks/<name>_blocks.txt.
     """
-    ruta_audit  = Path(env.get("FORT_OUT", "results/")) / "audit"
-    bloques_dir = Path(env.get("FORT_OUT", "results/")) / "bloques"
+    audit_path = Path(env.get("FORT_OUT", "results/")) / "audit"
+    blocks_dir = Path(env.get("FORT_OUT", "results/")) / "blocks"
 
-    if not ruta_audit.exists():
-        return False, 0.0, f"{ruta_audit} not found — run 'perfilador' first"
+    if not audit_path.exists():
+        return False, 0.0, f"{audit_path} not found — run 'profiler' first"
 
-    debug_files = sorted(ruta_audit.glob("*_DEBUG.csv"))
+    debug_files = sorted(audit_path.glob("*_DEBUG.csv"))
     if not debug_files:
-        return False, 0.0, f"No *_DEBUG.csv files found in {ruta_audit}"
+        return False, 0.0, f"No *_DEBUG.csv files found in {audit_path}"
 
-    bloques_dir.mkdir(parents=True, exist_ok=True)
+    blocks_dir.mkdir(parents=True, exist_ok=True)
 
-    t0      = time.time()
-    errores = []
+    t0 = time.time()
+    errors = []
 
     for debug_file in debug_files:
-        nombre = debug_file.name.replace("_DEBUG.csv", "")
-        salida = bloques_dir / f"{nombre}_bloques.txt"
+        name = debug_file.name.replace("_DEBUG.csv", "")
+        output = blocks_dir / f"{name}_blocks.txt"
 
-        cmd = [sys.executable, str(_HERE / "analyzers/analisis_bloques_v8.py"), str(debug_file)]
+        cmd = [sys.executable, str(_HERE / "analyzers/block_analysis.py"), str(debug_file)]
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
         if result.returncode == 0:
-            salida.write_text(result.stdout, encoding="utf-8")
+            output.write_text(result.stdout, encoding="utf-8")
         else:
-            errores.append(f"{debug_file.name}: {result.stderr.strip()[:80]}")
+            errors.append(f"{debug_file.name}: {result.stderr.strip()[:80]}")
 
     elapsed = time.time() - t0
-    n       = len(debug_files)
-    e       = len(errores)
+    n = len(debug_files)
+    e = len(errors)
 
     if not quiet:
-        print(f"  Processed {n} files → {bloques_dir}  ({e} errors)")
+        print(f"  Processed {n} files → {blocks_dir}  ({e} errors)")
 
-    if errores:
-        return False, elapsed, "\n".join(errores)
+    if errors:
+        return False, elapsed, "\n".join(errors)
     return True, elapsed, f"{n} files processed"
 
 
@@ -124,12 +125,12 @@ def run_bloques(quiet: bool, env: dict) -> tuple:
 # HELPERS
 # =============================================================================
 
-RESET  = "\033[0m"
-GREEN  = "\033[32m"
-RED    = "\033[31m"
+RESET = "\033[0m"
+GREEN = "\033[32m"
+RED = "\033[31m"
 YELLOW = "\033[33m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
 
 
 def fmt_time(seconds: float) -> str:
@@ -149,7 +150,7 @@ def print_step_header(idx: int, total: int, name: str, desc: str, quiet: bool):
 
 
 def print_step_result(success: bool, elapsed: float, quiet: bool):
-    icon   = f"{GREEN}✓{RESET}" if success else f"{RED}✗{RESET}"
+    icon = f"{GREEN}✓{RESET}" if success else f"{RED}✗{RESET}"
     timing = f"{DIM}{fmt_time(elapsed)}{RESET}"
     if quiet:
         print(f"{icon} {timing}")
@@ -162,41 +163,22 @@ def print_step_result(success: bool, elapsed: float, quiet: bool):
 # MAIN
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run the Fortran static analysis pipeline."
+    parser = argparse.ArgumentParser(description="Run the Fortran static analysis pipeline.")
+    parser.add_argument("--list", action="store_true", help="List available steps and exit.")
+    parser.add_argument(
+        "--project", metavar="DIR", help="Path to the Fortran source directory to analyze (sets FORT_SRC)."
     )
     parser.add_argument(
-        "--list", action="store_true",
-        help="List available steps and exit."
+        "--output", metavar="DIR", help="Directory where all output files will be written (sets FORT_OUT)."
     )
+    parser.add_argument("--from", dest="from_step", metavar="STEP", help="Start execution from this step (inclusive).")
+    parser.add_argument("--only", nargs="+", metavar="STEP", help="Run only these steps.")
+    parser.add_argument("--skip", nargs="+", metavar="STEP", help="Skip these steps.")
+    parser.add_argument("--continue-on-error", action="store_true", help="Continue to next step even if a step fails.")
     parser.add_argument(
-        "--project", metavar="DIR",
-        help="Path to the Fortran source directory to analyze (sets FORT_SRC)."
-    )
-    parser.add_argument(
-        "--output", metavar="DIR",
-        help="Directory where all output files will be written (sets FORT_OUT)."
-    )
-    parser.add_argument(
-        "--from", dest="from_step", metavar="STEP",
-        help="Start execution from this step (inclusive)."
-    )
-    parser.add_argument(
-        "--only", nargs="+", metavar="STEP",
-        help="Run only these steps."
-    )
-    parser.add_argument(
-        "--skip", nargs="+", metavar="STEP",
-        help="Skip these steps."
-    )
-    parser.add_argument(
-        "--continue-on-error", action="store_true",
-        help="Continue to next step even if a step fails."
-    )
-    parser.add_argument(
-        "--quiet", action="store_true",
-        help="Suppress script output — show only step names and results."
+        "--quiet", action="store_true", help="Suppress script output — show only step names and results."
     )
     args = parser.parse_args()
 
@@ -209,12 +191,12 @@ def main():
 
     # --list
     if args.list:
-        fort_src = env.get("FORT_SRC", "../athys/mercedes/")
+        fort_src = env.get("FORT_SRC", "tests/fixtures/")
         fort_out = env.get("FORT_OUT", "results/")
         print(f"\n{'Step':<22} {'Script':<28} Description")
         print("─" * 78)
         for name, script, desc in STEPS:
-            s = script if script else "analisis_bloques_v8.py (batch)"
+            s = script if script else "block_analysis.py (batch)"
             print(f"  {name:<20} {s:<28} {desc}")
         print()
         print(f"  FORT_SRC  →  {fort_src}")
@@ -260,8 +242,8 @@ def main():
     print()
 
     # Execute
-    total    = len(steps_to_run)
-    results  = []   # (name, success, elapsed)
+    total = len(steps_to_run)
+    results = []  # (name, success, elapsed)
     t_global = time.time()
 
     for i, (name, script, desc) in enumerate(steps_to_run, 1):
@@ -269,7 +251,7 @@ def main():
 
         if script is None:
             # Special step: bloques batch
-            success, elapsed, msg = run_bloques(args.quiet, env)
+            success, elapsed, msg = run_blocks(args.quiet, env)
             if not args.quiet and msg:
                 print(f"  {msg}")
         else:
@@ -287,13 +269,14 @@ def main():
         results.append((name, success, elapsed))
 
         if not success and not args.continue_on_error:
-            print(f"\n{RED}Pipeline stopped at '{name}'. "
-                  f"Use --continue-on-error to proceed past failures.{RESET}\n")
+            print(
+                f"\n{RED}Pipeline stopped at '{name}'. " f"Use --continue-on-error to proceed past failures.{RESET}\n"
+            )
             break
 
     # Summary
     total_time = time.time() - t_global
-    n_ok   = sum(1 for _, s, _ in results if s)
+    n_ok = sum(1 for _, s, _ in results if s)
     n_fail = sum(1 for _, s, _ in results if not s)
 
     print(f"\n{BOLD}{'─' * 60}{RESET}")

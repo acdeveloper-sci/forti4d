@@ -2,14 +2,14 @@ from enum import Enum
 
 
 class StatementKind(str, Enum):
-    # --- PROGRAM UNITS (Nivel Superior) ---
+    # --- PROGRAM UNITS (Top Level) ---
     PROGRAM_UNIT = "program_unit"  # PROGRAM
     MODULE_UNIT = "module_unit"  # MODULE
     SUBROUTINE_UNIT = "subroutine_unit"  # SUBROUTINE
     FUNCTION_UNIT = "function_unit"  # FUNCTION
     BLOCK_DATA_UNIT = "block_data_unit"  # BLOCK DATA
 
-    # --- SCOPING UNITS & DEFINITIONS (Definiciones) ---
+    # --- SCOPING UNITS & DEFINITIONS ---
     INTERFACE_BLOCK = "interface_block"  # INTERFACE
     TYPE_DEFINITION = "type_definition"  # TYPE (::)
     ENUM_DEF = "enum_definition"  # ENUM, BIND(C)
@@ -28,7 +28,7 @@ class StatementKind(str, Enum):
     NAMELIST_STMT = "namelist_stmt"  # NAMELIST /group/
     INCLUDE_STMT = "include_stmt"  # INCLUDE 'file'
 
-    # --- EXECUTABLE CONSTRUCTS (Bloques) ---
+    # --- EXECUTABLE CONSTRUCTS (Blocks) ---
     IF_CONSTRUCT = "if_construct"  # IF (...) THEN
     DO_CONSTRUCT = "do_construct"  # DO
     DO_WHILE_CONSTRUCT = "do_while_construct"
@@ -36,21 +36,21 @@ class StatementKind(str, Enum):
     ASSOCIATE_CONSTRUCT = "associate_construct"  # ASSOCIATE
     BLOCK_CONSTRUCT = "block_construct"  # BLOCK
     CRITICAL_CONSTRUCT = "critical_construct"  # CRITICAL
-    WHERE_CONSTRUCT = "where_construct"  # WHERE (...) Bloque
-    FORALL_CONSTRUCT = "forall_construct"  # FORALL (...) Bloque
+    WHERE_CONSTRUCT = "where_construct"  # WHERE (...) Block
+    FORALL_CONSTRUCT = "forall_construct"  # FORALL (...) Block
 
-    # --- SPINE (Divisiones estructurales) ---
+    # --- SPINE (Structural divisions) ---
     CONTAINS_STMT = "contains_stmt"  # CONTAINS
     ELSE_STMT = "else_stmt"  # ELSE / ELSE IF / ELSEWHERE
     CASE_STMT = "case_stmt"  # CASE / CLASS IS / TYPE IS
-    END_BLOCK_STMT = "end_block_stmt"  # Cualquier END explícito o implícito
+    END_BLOCK_STMT = "end_block_stmt"  # Any explicit or implicit END
 
     # --- ACTION STATEMENTS ---
     ALLOCATION_STMT = "allocation_stmt"  # ALLOCATE / DEALLOCATE
     POINTER_ACTION = "pointer_action"  # NULLIFY / =>
     IO_STMT = "io_stmt"  # READ, WRITE, PRINT, OPEN
     CONTROL_STMT = "control_stmt"  # CALL, GOTO, RETURN, STOP, CYCLE, EXIT, CONTINUE
-    ASSIGNMENT_STMT = "assignment_stmt"  # a = b + c (Detectado por lógica, no regex directa)
+    ASSIGNMENT_STMT = "assignment_stmt"  # a = b + c (detected by logic, not regex)
 
     # --- UNKNOWN ---
     UNKNOWN = "unknown"
@@ -60,18 +60,18 @@ class StatementKind(str, Enum):
     ENTRY_STMT = "entry_stmt"  # ENTRY
 
     # --- SIMPLE STATEMENTS ---
-    ACCESS_STMT = "access_stmt"  # PUBLIC / PRIVATE / PROTECTED (Sentencias)
+    ACCESS_STMT = "access_stmt"  # PUBLIC / PRIVATE / PROTECTED (Statements)
     LOGICAL_IF_STMT = "logical_if_stmt"  # IF (x) y=1
     PREPROCESSOR_DIR = "preprocessor_dir"  # #ifdef, etc.
-    COMMENT = "comment"  # Comentarios
-    BLANK_LINE = "blank_line"  # Líneas en blanco o vacías
+    COMMENT = "comment"  # Comments
+    BLANK_LINE = "blank_line"  # Blank or empty lines
 
     # --- ENUM STRUCTURE ---
     END_ENUM_DEF = "end_enum_def"  # END ENUM
     ENUMERATOR_STMT = "enumerator_stmt"  # ENUMERATOR :: ...
 
-    # --- CONTROL DE FLUJO ---
-    GOTO_STMT = "goto_stmt"  # GO TO (Asignado/Computado/Incondicional)
+    # --- CONTROL FLOW ---
+    GOTO_STMT = "goto_stmt"  # GO TO (Assigned/Computed/Unconditional)
     RETURN_STMT = "return_stmt"  # RETURN
     EXIT_STMT = "exit_stmt"  # EXIT
     CYCLE_STMT = "cycle_stmt"  # CYCLE
@@ -79,22 +79,22 @@ class StatementKind(str, Enum):
     PAUSE_STMT = "pause_stmt"  # PAUSE
     CONTINUE_STMT = "continue_stmt"  # CONTINUE
 
-    # --- ENTRADA / SALIDA (I/O) ---
+    # --- INPUT / OUTPUT (I/O) ---
     READ_STMT = "read_stmt"
     WRITE_STMT = "write_stmt"
     PRINT_STMT = "print_stmt"
     OPEN_STMT = "open_stmt"
     CLOSE_STMT = "close_stmt"
     INQUIRE_STMT = "inquire_stmt"
-    FORMAT_STMT = "format_stmt"  # FORMAT (Es especial, suele ir etiquetado)
+    FORMAT_STMT = "format_stmt"  # FORMAT (special, usually labeled)
     FILE_POS_STMT = "file_position_stmt"  # REWIND / BACKSPACE / ENDFILE / FLUSH / WAIT
 
 
 # =============================================================================
-# TAXONOMÍA (GRUPOS) - AQUÍ ESTÁ LA MAGIA
+# TAXONOMY (GROUPS)
 # =============================================================================
 
-# Grupo: Unidades Principales (Arquitectura)
+# Group: Main Units (Architecture)
 PROGRAM_UNITS = {
     StatementKind.PROGRAM_UNIT,
     StatementKind.MODULE_UNIT,
@@ -120,14 +120,14 @@ IO_ACTIONS = {
     StatementKind.IO_STMT,
 }
 
-# Grupo: Unidades de Alcance (Donde se definen variables locales)
+# Group: Scoping Units (Where local variables are defined)
 SCOPING_UNITS = PROGRAM_UNITS | {
     StatementKind.INTERFACE_BLOCK,
     StatementKind.TYPE_DEFINITION,
     StatementKind.ENUM_DEF,
 }
 
-# Grupo: Constructos Ejecutables (Lógica anidable)
+# Group: Executable Constructs (Nestable logic)
 EXECUTABLE_CONSTRUCTS = {
     StatementKind.IF_CONSTRUCT,
     StatementKind.DO_CONSTRUCT,
@@ -140,10 +140,10 @@ EXECUTABLE_CONSTRUCTS = {
     StatementKind.FORALL_CONSTRUCT,
 }
 
-# Grupo: Apertura de Bloque (Indentación +1)
+# Group: Block Openers (Indentation +1)
 BLOCK_OPENERS = SCOPING_UNITS | EXECUTABLE_CONSTRUCTS
 
-# Grupo: Declaraciones (No ejecutables)
+# Group: Declarations (Non-executable)
 DECLARATION_STMTS = {
     StatementKind.VAR_DECLARATION,
     StatementKind.USE_STMT,

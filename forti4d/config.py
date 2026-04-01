@@ -1,23 +1,23 @@
 """
 config.py
-Configuración central del toolkit de análisis estático Fortran.
+Central configuration of the Fortran static analysis toolkit.
 
-Los valores por defecto pueden sobreescribirse con variables de entorno:
-  FORT_SRC  — ruta al directorio con el código fuente Fortran a analizar
-  FORT_OUT  — directorio donde se escriben todos los reportes y archivos de salida
+The default values ​​can be overridden with environment variables:
+  FORT_SRC — path to the directory containing the Fortran source code to be analyzed
+  FORT_OUT — directory where all reports and output files are written
 
-Ejemplo de uso individual:
-  FORT_SRC=/ruta/al/proyecto FORT_OUT=results/ python3 inventario.py
+Example of individual usage:
+  FORT_SRC=/path/to/project FORT_OUT=results/ python3 inventory.py
 
-Cuando se usa pipeline.py, estos valores se propagan automáticamente:
-  python3 pipeline.py --project /ruta/al/proyecto --output results/
+When using pipeline.py, these values ​​are automatically propagated:
+  python3 pipeline.py --project /path/to/project --output results/
 """
 
 import os
 from pathlib import Path
 
-# Directorio con el código fuente Fortran a analizar
-CARPETA_CODIGO = Path(os.environ.get("FORT_SRC", "tests/fixtures/"))
+# Directory with the Fortran source code to be analyzed
+CODE_PATH = Path(os.environ.get("FORT_SRC", "tests/fixtures/"))
 
-# Directorio raíz donde se escriben todos los archivos de salida
-RUTA_RESULTADOS = Path(os.environ.get("FORT_OUT", "results/"))
+# Root directory where all output files are written
+RESULTS_PATH = Path(os.environ.get("FORT_OUT", "results/"))

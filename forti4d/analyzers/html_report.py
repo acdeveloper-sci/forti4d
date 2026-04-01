@@ -1,8 +1,8 @@
 """
-reporte_html.py
-Generates a self-contained HTML report from reporte_priorizacion.csv.
+html_report.py
+Generates a self-contained HTML report from report_prioritization.csv.
 
-Output: reporte.html — single file, inline CSS and JS, no external dependencies.
+Output: report.html — single file, inline CSS and JS, no external dependencies.
 
 Sections:
   1. Header — project name, generation date, global totals
@@ -15,79 +15,78 @@ import html
 from datetime import datetime
 from pathlib import Path
 
-from forti4d.config import RUTA_RESULTADOS
+from forti4d.config import RESULTS_PATH
 
-PRIORIDAD_CSV = RUTA_RESULTADOS / "reporte_priorizacion.csv"
-SALIDA_HTML   = RUTA_RESULTADOS / "reporte.html"
+PRIORITY_CSV = RESULTS_PATH / "report_prioritization.csv"
+HTML_OUTPUT = RESULTS_PATH / "report.html"
 
 # Visible columns in the main table: (CSV_field, display_label)
-COLUMNAS_TABLA = [
-    ("Prioridad",     "Prioridad"),
-    ("Score",         "Score"),
-    ("Archivo",       "Archivo"),
-    ("Unidad",        "Unidad"),
-    ("Type",          "Type"),
-    ("CC",            "CC"),
-    ("Fan_In",        "Fan-In"),
-    ("Pct_Legacy",    "Pct_Legacy"),
+TABLE_COLUMNS = [
+    ("Priority", "Priority"),
+    ("Score", "Score"),
+    ("File", "File"),
+    ("Unit", "Unit"),
+    ("Type", "Type"),
+    ("CC", "CC"),
+    ("Fan_In", "Fan-In"),
+    ("Pct_Legacy", "Pct_Legacy"),
     ("Reachability_Status", "Reachability"),
-    ("Estrategia",    "Estrategia"),
+    ("Strategy", "Strategy"),
     ("Implicit_None", "Impl.None"),
-    ("Tiene_Equiv",   "Equiv"),
+    ("Has_Equiv", "Equiv"),
 ]
 
-PRIORITY_ORDER = ["CRITICA", "ALTA", "MEDIA", "BAJA", "DEAD_CODE"]
+PRIORITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "DEAD_CODE"]
 
 TIER_COLORS = {
-    "CRITICA":   "#c0392b",
-    "ALTA":      "#e67e22",
-    "MEDIA":     "#f1c40f",
-    "BAJA":      "#27ae60",
+    "CRITICAL": "#c0392b",
+    "HIGH": "#e67e22",
+    "MEDIUM": "#f1c40f",
+    "LOW": "#27ae60",
     "DEAD_CODE": "#95a5a6",
 }
 
 TIER_TEXT_COLORS = {
-    "CRITICA":   "#ffffff",
-    "ALTA":      "#ffffff",
-    "MEDIA":     "#333333",
-    "BAJA":      "#ffffff",
+    "CRITICAL": "#ffffff",
+    "HIGH": "#ffffff",
+    "MEDIUM": "#333333",
+    "LOW": "#ffffff",
     "DEAD_CODE": "#ffffff",
 }
 
 
-def cargar_datos():
-    if not PRIORIDAD_CSV.exists():
-        print(f"ERROR: {PRIORIDAD_CSV} no encontrado. Ejecuta priorizacion.py primero.")
+def data_load():
+    if not PRIORITY_CSV.exists():
+        print(f"ERROR: {PRIORITY_CSV} not found. Run prioritization.py first.")
         return []
-    with open(PRIORIDAD_CSV, encoding="utf-8-sig") as f:
+    with open(PRIORITY_CSV, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 
-def _badge(prioridad):
-    bg  = TIER_COLORS.get(prioridad, "#cccccc")
-    fg  = TIER_TEXT_COLORS.get(prioridad, "#000000")
-    txt = html.escape(prioridad)
-    return (f'<span class="badge" '
-            f'style="background:{bg};color:{fg}">{txt}</span>')
+def _badge(priority):
+    bg = TIER_COLORS.get(priority, "#cccccc")
+    fg = TIER_TEXT_COLORS.get(priority, "#000000")
+    txt = html.escape(priority)
+    return f'<span class="badge" ' f'style="background:{bg};color:{fg}">{txt}</span>'
 
 
 def _td(value, field):
     v = html.escape(str(value)) if value is not None else ""
-    if field == "Prioridad":
+    if field == "Priority":
         return f"<td>{_badge(value)}</td>"
     return f"<td>{v}</td>"
 
 
-def generar_html(filas):
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
-    total = len(filas)
+def generate_html(rows):
+    date_ = datetime.now().strftime("%Y-%m-%d %H:%M")
+    total = len(rows)
 
     # Count per tier
-    conteo = {t: 0 for t in PRIORITY_ORDER}
-    for r in filas:
-        p = r.get("Prioridad", "")
-        if p in conteo:
-            conteo[p] += 1
+    count = {t: 0 for t in PRIORITY_ORDER}
+    for r in rows:
+        p = r.get("Priority", "")
+        if p in count:
+            count[p] += 1
 
     # ---- CSS ----------------------------------------------------------------
     css = """
@@ -139,49 +138,48 @@ footer { text-align: center; padding: 16px; color: #999; font-size: 0.78em; }
     # ---- Summary cards -------------------------------------------------------
     cards_html = []
     for tier in PRIORITY_ORDER:
-        n   = conteo[tier]
+        n = count[tier]
         pct = f"{n/total*100:.1f}%" if total else "0%"
-        bg  = TIER_COLORS[tier]
-        fg  = TIER_TEXT_COLORS[tier]
+        bg = TIER_COLORS[tier]
+        fg = TIER_TEXT_COLORS[tier]
         cards_html.append(
             f'<div class="card" style="background:{bg};color:{fg}">'
             f'<div class="tier">{tier}</div>'
             f'<div class="count">{n}</div>'
             f'<div class="pct">{pct}</div>'
-            f'</div>'
+            f"</div>"
         )
     cards_html.append(
         f'<div class="card" style="background:#2c3e50;color:#fff">'
         f'<div class="tier">TOTAL</div>'
         f'<div class="count">{total}</div>'
         f'<div class="pct">100%</div>'
-        f'</div>'
+        f"</div>"
     )
 
     # ---- Filter buttons ------------------------------------------------------
-    filter_buttons = ['<span>Filtrar:</span>',
-                      '<button class="btn btn-all active" onclick="filterBy(\'ALL\')">Todas</button>']
+    filter_buttons = [
+        "<span>Filter:</span>",
+        '<button class="btn btn-all active" onclick="filterBy(\'ALL\')">All</button>',
+    ]
     for tier in PRIORITY_ORDER:
         bg = TIER_COLORS[tier]
         fg = TIER_TEXT_COLORS[tier]
         filter_buttons.append(
-            f'<button class="btn" style="background:{bg};color:{fg}" '
-            f'onclick="filterBy(\'{tier}\')">{tier}</button>'
+            f'<button class="btn" style="background:{bg};color:{fg}" ' f"onclick=\"filterBy('{tier}')\">{tier}</button>"
         )
 
     # ---- Table headers -------------------------------------------------------
     th_list = []
-    for i, (_, label) in enumerate(COLUMNAS_TABLA):
+    for i, (_, label) in enumerate(TABLE_COLUMNS):
         th_list.append(f'<th onclick="sortTable({i})">{html.escape(label)}</th>')
 
     # ---- Table rows ----------------------------------------------------------
     rows_html = []
-    for r in filas:
-        prioridad = r.get("Prioridad", "")
-        cells = "".join(_td(r.get(field, ""), field) for field, _ in COLUMNAS_TABLA)
-        rows_html.append(
-            f'<tr data-priority="{html.escape(prioridad)}">{cells}</tr>'
-        )
+    for r in rows:
+        priority = r.get("Priority", "")
+        cells = "".join(_td(r.get(field, ""), field) for field, _ in TABLE_COLUMNS)
+        rows_html.append(f'<tr data-priority="{html.escape(priority)}">{cells}</tr>')
 
     # ---- JS ------------------------------------------------------------------
     js = """
@@ -241,7 +239,7 @@ function sortTable(col) {
 <body>
 <header>
   <h1>Fortran Static Analysis — Migration Priority Report</h1>
-  <p>Generated: {fecha} &nbsp;|&nbsp; {total} program units</p>
+  <p>Generated: {date_} &nbsp;|&nbsp; {total} program units</p>
 </header>
 <div class="container">
 
@@ -272,16 +270,16 @@ function sortTable(col) {
 
 
 def main():
-    filas = cargar_datos()
-    if not filas:
+    rows = data_load()
+    if not rows:
         return
 
-    doc = generar_html(filas)
+    doc = generate_html(rows)
 
-    with open(SALIDA_HTML, "w", encoding="utf-8") as f:
+    with open(HTML_OUTPUT, "w", encoding="utf-8") as f:
         f.write(doc)
 
-    print(f"Generado: {SALIDA_HTML} ({len(filas)} unidades)")
+    print(f"Generated: {HTML_OUTPUT} ({len(rows)} units)")
 
 
 if __name__ == "__main__":
