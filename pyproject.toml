@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forti4d"
-version = "0.4.0"
+version = "0.7.0"
 description = "Fortran static analysis toolkit — MI4D model (4-axis risk & structure inspection)"
 readme = "README.md"
 license = { file = "LICENSE" }
