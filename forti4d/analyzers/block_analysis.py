@@ -286,7 +286,7 @@ def main(debug_file):
         children_objs.sort(key=lambda x: int(x["Start_Line"]))
 
         indent = "    " * level
-        print(f"\n{indent}>> UNIDAD: {u_name} ({u['Type']})")
+        print(f"\n{indent}>> UNIT: {u_name} ({u['Type']})")
 
         # Process segments between children (Gaps)
         cursor = 0
@@ -323,7 +323,7 @@ def main(debug_file):
             blocks = analyze_topology(seg_final)
             print_blocks(blocks, indent + "  ")
 
-    print(f"STRUCTURAL ANALYSIS V10: {source_name}")
+    print(f"STRUCTURAL ANALYSIS: {source_name}")
     print("=" * 80)
 
     roots = [u for u in units_map.values() if u["Parent"] == "GLOBAL"]

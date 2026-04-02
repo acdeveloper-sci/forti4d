@@ -12,34 +12,34 @@ configuration to each subprocess via environment variables.
 
 ```bash
 # Run all steps with defaults from config.py
-python3 pipeline.py
+forti4d
 
 # Specify project and output directory
-python3 pipeline.py --project ../myproject --output out/
+forti4d --project ../myproject --output out/
 
 # List steps and active configuration
-python3 pipeline.py --list
+forti4d --list
 
 # Start from a specific step (re-run from that point forward)
-python3 pipeline.py --from complejidad
+forti4d --from complexity
 
 # Run only selected steps
-python3 pipeline.py --only sloc consolidar
+forti4d --only sloc consolidate
 
 # Skip specific steps
-python3 pipeline.py --skip grafo_visual
+forti4d --skip visual_graph
 
 # Do not stop on first failure
-python3 pipeline.py --continue-on-error
+forti4d --continue-on-error
 
 # Suppress script output — show only step names and results
-python3 pipeline.py --quiet
+forti4d --quiet
 ```
 
 Flags can be combined freely:
 
 ```bash
-python3 pipeline.py --project ../myproject --output out/ --from complejidad --quiet
+forti4d --project ../myproject --output out/ --from complexity --quiet
 ```
 
 ---
@@ -63,35 +63,35 @@ python3 pipeline.py --project ../myproject --output out/ --from complejidad --qu
 
 | Name | Script | Description |
 | :--- | :--- | :--- |
-| `inventario` | `inventario.py` | Build unit inventory from source files |
-| `dependencias` | `dependencias.py` | Build call graph and compute Fan-In/Fan-Out |
-| `perfilador` | `perfilador.py` | Classify statements and produce `audit/` DEBUG files |
-| `bloques` | `analisis_bloques_v8.py` (batch) | Block topology analysis — one output file per source file |
-| `analisis_estructura` | `analisis_estructura.py` | Classify files by architectural role |
-| `analisis_cruzado` | `analisis_cruzado.py` | Assign migration strategy per unit |
-| `resumen_ejecutivo` | `resumen_ejecutivo.py` | Generate executive summary |
-| `complejidad` | `complejidad.py` | Compute McCabe cyclomatic complexity |
+| `inventory` | `inventory.py` | Build unit inventory from source files |
+| `dependencies` | `dependencies.py` | Build call graph and compute Fan-In/Fan-Out |
+| `profiler` | `profiler.py` | Classify statements and produce `audit/` DEBUG files |
+| `blocks` | `block_analysis.py` (batch) | Block topology analysis — one output file per source file |
+| `structure_analysis` | `structure_analysis.py` | Classify files by architectural role |
+| `cross_analysis` | `cross_analysis.py` | Assign migration strategy per unit |
+| `executive_summary` | `executive_summary.py` | Generate executive summary |
+| `complexity` | `complexity.py` | Compute McCabe cyclomatic complexity |
 | `common_blocks` | `common_blocks.py` | Detect COMMON block coupling |
-| `simbolos` | `simbolos.py` | Extract variable/parameter/implicit symbols per unit |
-| `tipos_derivados` | `tipos_derivados.py` | Extract derived TYPE definitions and their components |
-| `equivalencias` | `equivalencias.py` | Detect EQUIVALENCE aliasing groups (union-find) |
-| `alcanzabilidad` | `alcanzabilidad.py` | Dead code detection from entry points |
+| `symbols` | `symbols.py` | Extract variable/parameter/implicit symbols per unit |
+| `derived_types` | `derived_types.py` | Extract derived TYPE definitions and their components |
+| `equivalences` | `equivalences.py` | Detect EQUIVALENCE aliasing groups (union-find) |
+| `reachability` | `reachability.py` | Dead code detection from entry points |
 | `sloc` | `sloc.py` | Precise SLOC count per unit |
 | `clones` | `clones.py` | Detect identical/similar/diverged duplicate units |
-| `consolidar` | `consolidar.py` | Join all reports into `reporte_consolidado.csv` |
-| `grafo_visual` | `grafo_visual.py` | Generate call graph DOT files |
-| `priorizacion` | `priorizacion.py` | Compute composite risk score and rank units for migration |
-| `reporte_html` | `reporte_html.py` | Generate self-contained HTML report |
+| `consolidate` | `consolidate.py` | Join all reports into `report_consolidated.csv` |
+| `visual_graph` | `visual_graph.py` | Generate call graph DOT files |
+| `prioritization` | `prioritization.py` | Compute composite risk score and rank units for migration |
+| `html_report` | `html_report.py` | Generate self-contained HTML report |
 
 ---
 
-## The `bloques` Step
+## The `blocks` Step
 
-The `bloques` step is special: it has no single script. Instead, it
-batch-runs `analisis_bloques_v8.py` once per `*_DEBUG.csv` file found in
-`<FORT_OUT>/audit/`. Output files are written to `<FORT_OUT>/bloques/`.
+The `blocks` step is special: it has no single script. Instead, it
+batch-runs `block_analysis.py` once per `*_DEBUG.csv` file found in
+`<FORT_OUT>/audit/`. Output files are written to `<FORT_OUT>/blocks/`.
 
-This step requires `perfilador` to have run first.
+This step requires `profiler` to have run first.
 
 ---
 
@@ -113,12 +113,12 @@ Terminal output includes per-step timing and a final summary table:
 
 ```
 === Fortran Static Analysis Pipeline ===
-Project : ../athys/mercedes/
+Project : ../myproject/
 Output  : results/
 Steps   : 19
 
 ────────────────────────────────────────────────────────────
-[1/13] inventario  —  Build unit inventory from source files
+[1/19] inventory  —  Build unit inventory from source files
 ────────────────────────────────────────────────────────────
 ...
   ✓ OK  2.3s
@@ -126,8 +126,8 @@ Steps   : 19
 ────────────────────────────────────────────────────────────
 Summary  —  45.1s total
 ────────────────────────────────────────────────────────────
-  ✓  inventario              2.3s
-  ✓  dependencias            8.7s
+  ✓  inventory              2.3s
+  ✓  dependencies           8.7s
   ...
 
 All 19 steps completed successfully.
