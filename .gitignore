@@ -1,17 +1,27 @@
-# Outputs del pipeline
-*.csv
-*.dot
-*.svg
-*.png
-RESUMEN_PROYECTO.md
-
-
-# Directorios de auditoría y análisis
+# Analysis outputs
 results/
-audit/
-bloques/
+
+# Test outputs
+tests/results/
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+
+# Virtual environment
+.venv/
+
+# Build / packaging
+dist/
+build/
+*.egg-info/
+
+# Test cache
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

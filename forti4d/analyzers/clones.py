@@ -3,10 +3,10 @@ clones.py
 Compares same-named units across files to detect whether they are identical,
 similar, or diverged copies.
 
-Reads the duplicate-unit list from dep_00_ambiguedades.csv, extracts and
+Reads the duplicate-unit list from dep_00_ambiguities.csv, extracts and
 normalizes the source of each unit, and performs pairwise comparison.
 
-Output: reporte_clones.csv  — one row per (unit, file_A, file_B) pair.
+Output: report_clones.csv  — one row per (unit, file_A, file_B) pair.
 """
 
 import csv
@@ -15,182 +15,184 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from forti4d.analyzers.inventario import cargar_inventario
+from forti4d.analyzers.inventory import load_inventory
 from forti4d.lib.reader_logical import read_logical_lines
-from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.config import CODE_PATH, RESULTS_PATH
 
 # =============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # =============================================================================
-AMBIGUEDADES = RUTA_RESULTADOS / "dep_00_ambiguedades.csv"
-SALIDA_CSV   = RUTA_RESULTADOS / "reporte_clones.csv"
+AMBIGUITIES_PATH = RESULTS_PATH / "dep_00_ambiguities.csv"
+CSV_OUTPUT = RESULTS_PATH / "report_clones.csv"
 
 # Umbral de similitud: >= este valor → SIMILAR; == 1.0 → IDENTICO
-UMBRAL_SIMILAR = 0.80
+SIMILAR_THRESHOLD = 0.80
 
 
 # =============================================================================
-# EXTRACCIÓN Y NORMALIZACIÓN
+# EXTRACTION AND NORMALIZATION
 # =============================================================================
 
-def construir_indice_archivos(carpeta: Path) -> dict:
+
+def build_file_index(path: Path) -> dict:
     """Returns dict: basename → full Path for all Fortran source files."""
     index = {}
-    for f in carpeta.rglob("*"):
+    for f in path.rglob("*"):
         if f.suffix.lower() in (".f90", ".f", ".for", ".f77", ".f95", ".f03"):
             index[f.name] = f
     return index
 
 
-def extraer_lineas_unidad(ruta: Path, inicio: int, fin: int) -> list:
+def extract_lines_unit(path: Path, start: int, end: int) -> list:
     """
     Reads a Fortran source file and returns the normalized logical lines
-    belonging to the unit at [inicio, fin].
+    belonging to the unit at [start, end].
 
     Normalization: comments and blank lines removed, whitespace collapsed,
     text uppercased.
     """
     try:
-        logical_lines = read_logical_lines(str(ruta))
+        logical_lines = read_logical_lines(str(path))
     except Exception:
         return []
 
-    resultado = []
+    result = []
     for ll in logical_lines:
-        if ll.start_line < inicio:
+        if ll.start_line < start:
             continue
-        if ll.start_line > fin:
+        if ll.start_line > end:
             break
         if ll.is_comment or not ll.text.strip():
             continue
-        normalizado = " ".join(ll.text.upper().split())
-        resultado.append(normalizado)
-    return resultado
+        standardized = " ".join(ll.text.upper().split())
+        result.append(standardized)
+    return result
 
 
-def similitud(lineas_a: list, lineas_b: list) -> float:
-    if not lineas_a and not lineas_b:
+def similarity(lines_a: list, lines_b: list) -> float:
+    if not lines_a and not lines_b:
         return 1.0
-    if not lineas_a or not lineas_b:
+    if not lines_a or not lines_b:
         return 0.0
-    return SequenceMatcher(None, lineas_a, lineas_b).ratio()
+    return SequenceMatcher(None, lines_a, lines_b).ratio()
 
 
-def clasificar(ratio: float) -> str:
+def classify(ratio: float) -> str:
     if ratio >= 1.0:
-        return "IDENTICO"
-    if ratio >= UMBRAL_SIMILAR:
+        return "IDENTICAL"
+    if ratio >= SIMILAR_THRESHOLD:
         return "SIMILAR"
-    return "DIVERGIDO"
+    return "DIVERGED"
 
 
 # =============================================================================
 # MAIN
 # =============================================================================
 
+
 def main():
-    RUTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     # Load inventory
-    inventario = cargar_inventario()
-    if not inventario:
-        print("ERROR: inventario vacío. Ejecuta inventario.py primero.")
+    inventory_list = load_inventory()
+    if not inventory_list:
+        print("ERROR: inventory is empty. Run inventory.py first.")
         return
 
-    # Index: (archivo_basename, nombre_upper) → {tipo, inicio, fin}
+    # Index: (file_basename, name_upper) → {type, start, end}
     inv_idx = {}
-    for row in inventario:
-        key = (row["Archivo"], row["Nombre"].upper())
+    for row in inventory_list:
+        key = (row["File"], row["Name"].upper())
         inv_idx[key] = {
-            "tipo":   row["Tipo"],
-            "inicio": int(row["Linea_Inicio"]),
-            "fin":    int(row["Linea_Fin"]),
+            "type": row["Type"],
+            "start": int(row["Start_Line"]),
+            "end": int(row["End_Line"]),
         }
 
     # Load ambiguedades
-    if not AMBIGUEDADES.exists():
-        print(f"ERROR: {AMBIGUEDADES} no encontrado. Ejecuta dependencias.py primero.")
+    if not AMBIGUITIES_PATH.exists():
+        print(f"ERROR: {AMBIGUITIES_PATH} not found. Run dependencies.py first.")
         return
 
-    grupos = []  # [(nombre, tipo, [archivo1, archivo2, ...])]
-    with open(AMBIGUEDADES, encoding="utf-8-sig") as f:
+    groups = []  # [(name, utype, [file1, file2, ...])]
+    with open(AMBIGUITIES_PATH, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            nombre  = row["Nombre_Unidad"].strip().upper()
-            tipo    = row["Tipo"].strip()
-            archivos = [a.strip() for a in row["Lista_Archivos"].split(";") if a.strip()]
-            if len(archivos) >= 2:
-                grupos.append((nombre, tipo, archivos))
+            name = row["Unit_Name"].strip().upper()
+            utype = row["Type"].strip()
+            files = [a.strip() for a in row["File_List"].split(";") if a.strip()]
+            if len(files) >= 2:
+                groups.append((name, utype, files))
 
-    if not grupos:
-        print("No hay unidades duplicadas.")
-        _escribir_vacio()
+    if not groups:
+        print("No duplicate units found.")
+        _wrtite_empty_csv()
         return
 
     # Build file path index
-    arch_idx = construir_indice_archivos(CARPETA_CODIGO)
+    file_idx = build_file_index(CODE_PATH)
 
     # Pairwise comparisons
-    filas = []
-    for nombre, tipo, archivos in grupos:
-        for i in range(len(archivos)):
-            for j in range(i + 1, len(archivos)):
-                arch_a = archivos[i]
-                arch_b = archivos[j]
+    rows = []
+    for name, utype, files in groups:
+        for i in range(len(files)):
+            for j in range(i + 1, len(files)):
+                file_a = files[i]
+                file_b = files[j]
 
-                info_a = inv_idx.get((arch_a, nombre))
-                info_b = inv_idx.get((arch_b, nombre))
+                info_a = inv_idx.get((file_a, name))
+                info_b = inv_idx.get((file_b, name))
                 if not info_a or not info_b:
                     continue
 
-                ruta_a = arch_idx.get(arch_a)
-                ruta_b = arch_idx.get(arch_b)
-                if not ruta_a or not ruta_b:
+                path_a = file_idx.get(file_a)
+                path_b = file_idx.get(file_b)
+                if not path_a or not path_b:
                     continue
 
-                lineas_a = extraer_lineas_unidad(ruta_a, info_a["inicio"], info_a["fin"])
-                lineas_b = extraer_lineas_unidad(ruta_b, info_b["inicio"], info_b["fin"])
+                lines_a = extract_lines_unit(path_a, info_a["start"], info_a["end"])
+                lines_b = extract_lines_unit(path_b, info_b["start"], info_b["end"])
 
-                ratio  = similitud(lineas_a, lineas_b)
-                estado = clasificar(ratio)
+                ratio = similarity(lines_a, lines_b)
+                status = classify(ratio)
 
-                filas.append({
-                    "Nombre":        nombre,
-                    "Tipo":          tipo,
-                    "Archivo_A":     arch_a,
-                    "Archivo_B":     arch_b,
-                    "SLOC_A":        len(lineas_a),
-                    "SLOC_B":        len(lineas_b),
-                    "Similitud_Pct": round(ratio * 100, 1),
-                    "Estado":        estado,
-                })
+                rows.append(
+                    {
+                        "Unit": name,
+                        "Type": utype,
+                        "File_A": file_a,
+                        "File_B": file_b,
+                        "SLOC_A": len(lines_a),
+                        "SLOC_B": len(lines_b),
+                        "Similarity_Pct": round(ratio * 100, 1),
+                        "Status": status,
+                    }
+                )
 
     # Sort: diverged first, then similar, then identical; then by name
-    _orden = {"DIVERGIDO": 0, "SIMILAR": 1, "IDENTICO": 2}
-    filas.sort(key=lambda r: (_orden[r["Estado"]], r["Nombre"]))
+    _order = {"DIVERGED": 0, "SIMILAR": 1, "IDENTICAL": 2}
+    rows.sort(key=lambda r: (_order[r["Status"]], r["Unit"]))
 
-    campos = ["Nombre", "Tipo", "Archivo_A", "Archivo_B",
-              "SLOC_A", "SLOC_B", "Similitud_Pct", "Estado"]
-    with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=campos)
+    columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
+    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
-        w.writerows(filas)
+        w.writerows(rows)
 
-    n_id  = sum(1 for r in filas if r["Estado"] == "IDENTICO")
-    n_sim = sum(1 for r in filas if r["Estado"] == "SIMILAR")
-    n_div = sum(1 for r in filas if r["Estado"] == "DIVERGIDO")
+    n_id = sum(1 for r in rows if r["Status"] == "IDENTICAL")
+    n_sim = sum(1 for r in rows if r["Status"] == "SIMILAR")
+    n_div = sum(1 for r in rows if r["Status"] == "DIVERGED")
 
-    print(f"\n{len(filas)} pares comparados  ({len(grupos)} unidades con duplicados)")
-    print(f"  IDENTICO  : {n_id}")
+    print(f"\n{len(rows)} pairs compared  ({len(groups)} units with duplicates)")
+    print(f"  IDENTICAL : {n_id}")
     print(f"  SIMILAR   : {n_sim}")
-    print(f"  DIVERGIDO : {n_div}")
-    print(f"\nGenerado: {SALIDA_CSV}")
+    print(f"  DIVERGED  : {n_div}")
+    print(f"\nGenerated: {CSV_OUTPUT}")
 
 
-def _escribir_vacio():
-    campos = ["Nombre", "Tipo", "Archivo_A", "Archivo_B",
-              "SLOC_A", "SLOC_B", "Similitud_Pct", "Estado"]
-    with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        csv.DictWriter(f, fieldnames=campos).writeheader()
+def _wrtite_empty_csv():
+    columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
+    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        csv.DictWriter(f, fieldnames=columns).writeheader()
 
 
 if __name__ == "__main__":

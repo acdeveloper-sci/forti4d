@@ -4,29 +4,30 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from forti4d.analyzers.inventario import cargar_inventario
-from forti4d.config import RUTA_RESULTADOS
+from forti4d.analyzers.inventory import load_inventory
+from forti4d.config import RESULTS_PATH
 
 # =============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # =============================================================================
-RUTA_AUDIT          = RUTA_RESULTADOS / "audit"
-SALIDA_USO          = RUTA_RESULTADOS / "common_uso.csv"
-SALIDA_ACOPLAMIENTO = RUTA_RESULTADOS / "common_acoplamiento.csv"
+AUDIT_PATH = RESULTS_PATH / "audit"
+USAGE_OUTPUT = RESULTS_PATH / "common_usage.csv"
+COUPLING_OUTPUT = RESULTS_PATH / "common_coupling.csv"
 
-NOMBRE_BLANK = "(BLANK)"   # Etiqueta para COMMON sin nombre
+BLANK_NAME = "(BLANK)"  # Label for unnamed COMMON
 
 
 # =============================================================================
-# PARSEO DE SENTENCIAS COMMON
+# PARSING OF COMMON STATEMENTS
 # =============================================================================
 
-def extraer_bloques(contenido: str) -> list:
+
+def extract_blocks(content: str) -> list:
     """
-    Extrae los nombres de bloque de una sentencia COMMON.
+    Extracts block names from a COMMON statement.
 
-    Retorna una lista de nombres únicos de bloques referenciados en esa línea.
-    El blank COMMON (sin nombre o con //) se representa como NOMBRE_BLANK.
+    Returns a list of unique block names referenced on that line.
+    The blank COMMON (unnamed or with //) is represented as NOMBRE_BLANK.
 
     Ejemplos:
       "COMMON /A/ x, y"          → ["A"]
@@ -35,93 +36,92 @@ def extraer_bloques(contenido: str) -> list:
       "COMMON /A/ x /B/ y"       → ["A", "B"]
       "COMMON x /A/ y"           → ["(BLANK)", "A"]
     """
-    # Quitar la keyword COMMON del inicio
-    resto = re.sub(r"^\s*common\s*", "", contenido.strip(), flags=re.IGNORECASE)
+    # Strip the COMMON keyword from the start
+    rest = re.sub(r"^\s*common\s*", "", content.strip(), flags=re.IGNORECASE)
 
-    if not resto:
+    if not rest:
         return []
 
-    bloques = []
+    blocks = []
 
-    if resto.lstrip().startswith("/"):
-        # Comienza con bloque nombrado (o // para blank)
-        for m in re.finditer(r"/(\w*)/", resto):
-            nombre = m.group(1).strip()
-            bloques.append(nombre if nombre else NOMBRE_BLANK)
+    if rest.lstrip().startswith("/"):
+        # Starts with a named block (or // for blank)
+        for m in re.finditer(r"/(\w*)/", rest):
+            name = m.group(1).strip()
+            blocks.append(name if name else BLANK_NAME)
     else:
-        # Comienza con blank COMMON (variables antes de cualquier /)
-        bloques.append(NOMBRE_BLANK)
-        # Puede haber bloques nombrados después: COMMON x /A/ y
-        for m in re.finditer(r"/(\w*)/", resto):
-            nombre = m.group(1).strip()
-            bloques.append(nombre if nombre else NOMBRE_BLANK)
+        # Starts with blank COMMON (variables before any /)
+        blocks.append(BLANK_NAME)
+        # There may be named blocks after: COMMON x /A/ y
+        for m in re.finditer(r"/(\w*)/", rest):
+            name = m.group(1).strip()
+            blocks.append(name if name else BLANK_NAME)
 
-    # Deduplicar manteniendo orden (una línea no debería repetir el mismo bloque,
-    # pero si lo hace, lo contamos una sola vez por línea)
-    vistos = []
+    # Deduplicate while preserving order (a line should not repeat the same block,
+    # but if it does, count it only once per line)
+    seen_list = []
     seen = set()
-    for b in bloques:
+    for b in blocks:
         if b not in seen:
-            vistos.append(b)
+            seen_list.append(b)
             seen.add(b)
-    return vistos
+    return seen_list
 
 
 # =============================================================================
-# ANÁLISIS PRINCIPAL
+# MAIN ANALYSIS
 # =============================================================================
 
-def analizar_common():
-    print("--- Análisis de COMMON Blocks ---")
 
-    # 1. Cargar inventario
+def analyze_common():
+    print("--- COMMON Block Analysis ---")
+
+    # 1. Load inventory
     try:
-        inventario_lista = cargar_inventario()
+        inventory_list = load_inventory()
     except Exception as e:
-        print(f"ERROR cargando inventario: {e}")
+        print(f"ERROR loading inventory: {e}")
         return
 
-    if not inventario_lista:
-        print("El inventario está vacío.")
+    if not inventory_list:
+        print("Inventory is empty.")
         return
 
-    # Conversión de tipos y agrupación por archivo
-    mapa_unidades = defaultdict(list)
-    for u in inventario_lista:
-        archivo = u.get("Archivo", "").strip()
-        if not archivo:
+    # Type conversion and grouping by file
+    units_map = defaultdict(list)
+    for u in inventory_list:
+        file = u.get("File", "").strip()
+        if not file:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"] = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
-        mapa_unidades[archivo].append(u)
+            u["Start_Line"] = 0
+            u["End_Line"] = 0
+        units_map[file].append(u)
 
-    # Estructura de resultados:
-    # uso[(archivo, unidad)] = Counter(bloque -> n_apariciones)
-    uso = defaultdict(lambda: defaultdict(int))
-    # metadatos de unidad para el reporte
-    meta = {}   # (archivo, unidad) -> dict con Tipo
+    # Result structure:
+    # usage[(file, drive)] = Counter(block -> n occurrences)
+    usage = defaultdict(lambda: defaultdict(int))
+    # unit metadata for the report
+    meta = {}  # (file, drive) -> dict with Type
 
-    for u in inventario_lista:
-        k = (u["Archivo"], u["Nombre"])
-        meta[k] = {"Tipo": u.get("Tipo", "UNKNOWN")}
+    for u in inventory_list:
+        k = (u["File"], u["Name"])
+        meta[k] = {"Type": u.get("Type", "UNKNOWN")}
 
-    ruta_audit = RUTA_AUDIT
-    archivos_ordenados = sorted(mapa_unidades.keys(), key=str.lower)
+    audit_path_ = AUDIT_PATH
+    sorted_files = sorted(units_map.keys(), key=str.lower)
 
-    common_total = 0
+    total_common = 0
 
-    for nombre_archivo in archivos_ordenados:
-        debug_file = ruta_audit / f"{nombre_archivo}_DEBUG.csv"
+    for file_name in sorted_files:
+        debug_file = audit_path_ / f"{file_name}_DEBUG.csv"
         if not debug_file.exists():
             continue
 
-        unidades_en_archivo = sorted(
-            mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"]
-        )
+        units_on_file = sorted(units_map[file_name], key=lambda u: u["Start_Line"])
 
         with open(debug_file, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
@@ -129,137 +129,139 @@ def analizar_common():
                     continue
 
                 try:
-                    n_linea = int(row["Linea"])
+                    n_line = int(row["Line"])
                 except ValueError:
                     continue
 
-                contenido = row.get("Contenido", "")
-                bloques   = extraer_bloques(contenido)
+                content = row.get("Content", "")
+                blocks = extract_blocks(content)
 
-                if not bloques:
+                if not blocks:
                     continue
 
                 # Scope resolution
-                candidatos = [
-                    u for u in unidades_en_archivo
-                    if u["Linea_Inicio"] <= n_linea <= u["Linea_Fin"]
-                ]
-                if not candidatos:
+                candidates = [u for u in units_on_file if u["Start_Line"] <= n_line <= u["End_Line"]]
+                if not candidates:
                     scope = "GLOBAL"
-                    tipo  = "FILE_SCOPE"
+                    stype = "FILE_SCOPE"
                 else:
-                    u_scope = max(candidatos, key=lambda u: u["Linea_Inicio"])
-                    scope   = u_scope["Nombre"]
-                    tipo    = u_scope.get("Tipo", "UNKNOWN")
-                    meta[(nombre_archivo, scope)] = {"Tipo": tipo}
+                    u_scope = max(candidates, key=lambda u: u["Start_Line"])
+                    scope = u_scope["Name"]
+                    stype = u_scope.get("Type", "UNKNOWN")
+                    meta[(file_name, scope)] = {"Type": stype}
 
-                for bloque in bloques:
-                    uso[(nombre_archivo, scope)][bloque] += 1
-                    common_total += 1
+                for block in blocks:
+                    usage[(file_name, scope)][block] += 1
+                    total_common += 1
 
-    if common_total == 0:
-        print("No se encontraron sentencias COMMON en el corpus.")
-        print("(El código utiliza módulos F90 en lugar de COMMON blocks)")
-        # Generar CSVs vacíos con cabecera para mantener consistencia del pipeline
-        _escribir_csv_vacio(SALIDA_USO,
-            ["Archivo", "Unidad", "Tipo", "Bloque", "Apariciones"])
-        _escribir_csv_vacio(SALIDA_ACOPLAMIENTO,
-            ["Bloque", "N_Unidades", "N_Archivos", "Riesgo", "Unidades", "Archivos"])
+    if total_common == 0:
+        print("No COMMON statements found in the corpus.")
+        print("(The code uses F90 modules instead of COMMON blocks)")
+        # Generate empty CSVs with headers to maintain pipeline consistency
+        _write_empty_csv(USAGE_OUTPUT, ["File", "Unit", "Type", "Block", "Occurrences"])
+        _write_empty_csv(COUPLING_OUTPUT, ["Block", "N_Units", "N_Files", "Risk", "Units", "Files"])
         return
 
-    # 2. Construir reporte de uso (una fila por (unidad, bloque))
-    filas_uso = []
-    for (archivo, unidad), bloques_cnt in sorted(uso.items()):
-        tipo = meta.get((archivo, unidad), {}).get("Tipo", "UNKNOWN")
-        for bloque, apariciones in sorted(bloques_cnt.items()):
-            filas_uso.append({
-                "Archivo":     archivo,
-                "Unidad":      unidad,
-                "Tipo":        tipo,
-                "Bloque":      bloque,
-                "Apariciones": apariciones,
-            })
+    # 2. Build usage report (one row per (unit, block))
+    row_usage = []
+    for (file, unit), blocks_cnt in sorted(usage.items()):
+        stype = meta.get((file, unit), {}).get("Type", "UNKNOWN")
+        for block, occurrences in sorted(blocks_cnt.items()):
+            row_usage.append(
+                {
+                    "File": file,
+                    "Unit": unit,
+                    "Type": stype,
+                    "Block": block,
+                    "Occurrences": occurrences,
+                }
+            )
 
-    # 3. Construir reporte de acoplamiento (una fila por bloque)
-    # bloque -> set de (archivo, unidad)
-    bloque_unidades = defaultdict(set)
-    for (archivo, unidad), bloques_cnt in uso.items():
-        for bloque in bloques_cnt:
-            bloque_unidades[bloque].add((archivo, unidad))
+    # 3. Build coupling report (one row per block)
+    # block -> set de (file, unit)
+    units_block = defaultdict(set)
+    for (file, unit), blocks_cnt in usage.items():
+        for block in blocks_cnt:
+            units_block[block].add((file, unit))
 
-    filas_acoplamiento = []
-    for bloque, pares in sorted(bloque_unidades.items()):
-        n_unidades = len(pares)
-        archivos_unicos = sorted(set(a for a, _ in pares))
-        unidades_sorted = sorted(u for _, u in pares)
+    docking_rows = []
+    for block, pairs in sorted(units_block.items()):
+        n_units = len(pairs)
+        unique_files = sorted(set(a for a, _ in pairs))
+        sorted_units = sorted(u for _, u in pairs)
 
-        if n_unidades >= 5:
-            riesgo = "ALTO"
-        elif n_unidades >= 2:
-            riesgo = "MEDIO"
+        if n_units >= 5:
+            risk = "HIGH"
+        elif n_units >= 2:
+            risk = "MEDIUM"
         else:
-            riesgo = "BAJO"
+            risk = "LOW"
 
-        filas_acoplamiento.append({
-            "Bloque":     bloque,
-            "N_Unidades": n_unidades,
-            "N_Archivos": len(archivos_unicos),
-            "Riesgo":     riesgo,
-            "Unidades":   "; ".join(unidades_sorted),
-            "Archivos":   "; ".join(archivos_unicos),
-        })
+        docking_rows.append(
+            {
+                "Block": block,
+                "N_Units": n_units,
+                "N_Files": len(unique_files),
+                "Risk": risk,
+                "Units": "; ".join(sorted_units),
+                "Files": "; ".join(unique_files),
+            }
+        )
 
-    filas_acoplamiento.sort(key=lambda x: -x["N_Unidades"])
+    docking_rows.sort(key=lambda x: -x["N_Units"])
 
-    # 4. Exportar
-    _escribir_csv(SALIDA_USO, filas_uso,
-        ["Archivo", "Unidad", "Tipo", "Bloque", "Apariciones"])
+    # 4. Export
+    _write_csv(USAGE_OUTPUT, row_usage, ["File", "Unit", "Type", "Block", "Occurrences"])
 
-    _escribir_csv(SALIDA_ACOPLAMIENTO, filas_acoplamiento,
-        ["Bloque", "N_Unidades", "N_Archivos", "Riesgo", "Unidades", "Archivos"])
+    _write_csv(
+        COUPLING_OUTPUT,
+        docking_rows,
+        ["Block", "N_Units", "N_Files", "Risk", "Units", "Files"],
+    )
 
-    # 5. Resumen en consola
-    n_bloques = len(bloque_unidades)
-    n_unidades_afectadas = len(uso)
+    # 5. Console summary
+    n_blocks = len(units_block)
+    n_units_affected = len(usage)
 
-    print(f"Sentencias COMMON encontradas : {common_total}")
-    print(f"Bloques únicos                : {n_bloques}")
-    print(f"Unidades con COMMON           : {n_unidades_afectadas}")
+    print(f"COMMON statements found       : {total_common}")
+    print(f"Unique blocks                 : {n_blocks}")
+    print(f"Units with COMMON             : {n_units_affected}")
     print()
 
     from collections import Counter
-    riesgos = Counter(r["Riesgo"] for r in filas_acoplamiento)
-    print("Distribución de acoplamiento por bloque:")
-    for nivel in ("ALTO", "MEDIO", "BAJO"):
-        n = riesgos.get(nivel, 0)
+
+    risks = Counter(r["Risk"] for r in docking_rows)
+    print("Coupling distribution by block:")
+    for level in ("HIGH", "MEDIUM", "LOW"):
+        n = risks.get(level, 0)
         if n:
-            print(f"  {nivel:6}: {n} bloque(s)")
+            print(f"  {level:6}: {n} block(s)")
 
     print()
-    print("Bloques con mayor acoplamiento (más unidades comparten el bloque):")
-    for r in filas_acoplamiento[:10]:
-        print(f"  {r['Bloque']:20}  {r['N_Unidades']:3} unidades  "
-              f"[{r['Riesgo']}]  → {r['Unidades'][:60]}")
+    print("Most coupled blocks (shared by most units):")
+    for r in docking_rows[:10]:
+        print(f"  {r['Block']:20}  {r['N_Units']:3} units  " f"[{r['Risk']}]  → {r['Units'][:60]}")
 
-    print(f"\nGenerados: {SALIDA_USO}, {SALIDA_ACOPLAMIENTO}")
+    print(f"\nGenerated: {USAGE_OUTPUT}, {COUPLING_OUTPUT}")
 
 
 # =============================================================================
-# HELPERS DE ESCRITURA
+# WRITING HELPERS
 # =============================================================================
 
-def _escribir_csv(ruta, filas, columnas):
-    with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=columnas, extrasaction="ignore")
+
+def _write_csv(path, rows, columns):
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
-        w.writerows(filas)
+        w.writerows(rows)
 
 
-def _escribir_csv_vacio(ruta, columnas):
-    with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
-        csv.DictWriter(f, fieldnames=columnas).writeheader()
-    print(f"  {ruta} generado (vacío — sin COMMON en corpus)")
+def _write_empty_csv(path, columns):
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        csv.DictWriter(f, fieldnames=columns).writeheader()
+    print(f"  {path} generated (empty — no COMMON in corpus)")
 
 
 if __name__ == "__main__":
-    analizar_common()
+    analyze_common()

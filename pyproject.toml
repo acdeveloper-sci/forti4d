@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forti4d"
-version = "0.4.0"
+version = "0.7.0"
 description = "Fortran static analysis toolkit — MI4D model (4-axis risk & structure inspection)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -21,6 +21,13 @@ classifiers = [
 [project.scripts]
 forti4d = "forti4d.pipeline:main"
 
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["forti4d*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

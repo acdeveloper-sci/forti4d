@@ -14,8 +14,8 @@ Not run directly. Imported by every pipeline script.
 
 | Constant | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `CARPETA_CODIGO` | `FORT_SRC` | `../athys/mercedes/` | Directory containing the Fortran source files to analyze |
-| `RUTA_RESULTADOS` | `FORT_OUT` | `results/` | Root directory for all output files (CSVs, audit/, bloques/, DOTs) |
+| `CODE_PATH` | `FORT_SRC` | `tests/fixtures/` | Directory containing the Fortran source files to analyze |
+| `RESULTS_PATH` | `FORT_OUT` | `results/` | Root directory for all output files (CSVs, audit/, blocks/, DOTs) |
 
 Both constants are `pathlib.Path` objects.
 
@@ -28,8 +28,9 @@ Each constant is resolved in this order:
 1. **Environment variable present** → use that value.
 2. **Environment variable absent** → use the hardcoded default.
 
-The default values reflect the current active project. To switch projects,
-either edit the defaults in `config.py` or supply the environment variables.
+The default values reflect the fallback path for development and testing.
+To point at a real project, either edit the defaults in `config.py` or
+supply the environment variables.
 
 ---
 
@@ -39,20 +40,20 @@ either edit the defaults in `config.py` or supply the environment variables.
 
 ```python
 # config.py
-CARPETA_CODIGO  = Path(os.environ.get("FORT_SRC", "/new/project/path/"))
-RUTA_RESULTADOS = Path(os.environ.get("FORT_OUT", "results/"))
+CODE_PATH    = Path(os.environ.get("FORT_SRC", "/new/project/path/"))
+RESULTS_PATH = Path(os.environ.get("FORT_OUT", "results/"))
 ```
 
 ### Environment variable (one-off run)
 
 ```bash
-FORT_SRC=/path/to/project FORT_OUT=out/ python3 inventario.py
+FORT_SRC=/path/to/project FORT_OUT=out/ forti4d
 ```
 
-### Via pipeline.py (recommended)
+### Via the CLI (recommended)
 
 ```bash
-python3 pipeline.py --project /path/to/project --output out/
+forti4d --project /path/to/project --output out/
 ```
 
 `pipeline.py` sets `FORT_SRC` and `FORT_OUT` automatically before launching
@@ -63,11 +64,11 @@ when running through the pipeline.
 
 ## Notes
 
-- `RUTA_RESULTADOS` is created automatically (`mkdir(parents=True, exist_ok=True)`)
+- `RESULTS_PATH` is created automatically (`mkdir(parents=True, exist_ok=True)`)
   by the first script that writes output in any given run. You do not need to
   create it manually.
-- Scripts that write to subdirectories (`audit/`, `bloques/`) also create them
+- Scripts that write to subdirectories (`audit/`, `blocks/`) also create them
   as needed.
-- `analisis_bloques_v8.py` calls `cargar_inventario()` with no arguments;
-  it relies on the default path in `inventario.py`, which itself reads
-  `RUTA_RESULTADOS` from `config.py`.
+- `block_analysis.py` calls `load_inventory()` with no arguments; it relies
+  on the default path in `inventory.py`, which itself reads `RESULTS_PATH`
+  from `config.py`.

@@ -10,38 +10,38 @@ counts per unit using scope resolution.
 
 ## Configuration
 
-All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+All paths are resolved under `RESULTS_PATH`. See `config.py`.
 
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `CARPETA_CODIGO` | `FORT_SRC` env var → `../athys/mercedes/` | Path to the Fortran source directory |
-| `SALIDA_CSV` | `RUTA_RESULTADOS / "reporte_sloc.csv"` | Output file |
+| `CODE_PATH` | `FORT_SRC` env var → `tests/fixtures/` | Path to the Fortran source directory |
+| `OUTPUT_CSV` | `RESULTS_PATH / "report_sloc.csv"` | Output file |
 
 ---
 
 ## Inputs
 
-- Fortran source files in `CARPETA_CODIGO`
-- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
+- Fortran source files in `CODE_PATH`
+- `<FORT_OUT>/inventory_report.csv` (via `load_inventory()`)
 
 ---
 
-## Output: `<FORT_OUT>/reporte_sloc.csv`
+## Output: `<FORT_OUT>/report_sloc.csv`
 
-One row per program unit, sorted by `SLOC_neto` descending.
+One row per program unit, sorted by `SLOC_net` descending.
 
 | Column | Description |
 | :--- | :--- |
-| `Archivo` | Source file name |
-| `Unidad` | Unit name |
-| `Tipo` | Unit type |
+| `File` | Source file name |
+| `Unit` | Unit name |
+| `Type` | Unit type |
 | `LOC` | Total physical lines in the unit's line range |
-| `N_Blancos` | Blank physical lines |
-| `N_Comentarios` | Comment-only physical lines |
-| `N_Continuacion` | Continuation lines (2nd, 3rd… physical line of a multi-line statement) |
-| `SLOC_fisico` | `LOC - N_Blancos - N_Comentarios` (lines with actual code, including continuations) |
-| `SLOC_neto` | `SLOC_fisico - N_Continuacion` (logical statements only) |
-| `Pct_Comentario` | `N_Comentarios / LOC × 100` |
+| `N_Blank` | Blank physical lines |
+| `N_Comments` | Comment-only physical lines |
+| `N_Continuation` | Continuation lines (2nd, 3rd… physical line of a multi-line statement) |
+| `SLOC_physical` | `LOC - N_Blank - N_Comments` (lines with actual code, including continuations) |
+| `SLOC_net` | `SLOC_physical - N_Continuation` (logical statements only) |
+| `Pct_Comment` | `N_Comments / LOC × 100` |
 
 ---
 
@@ -61,13 +61,13 @@ from the `raw_lines` field of each logical line:
 
 ## Derived Metrics
 
-**SLOC_neto** equals the number of logical statements in the unit. This is
+**SLOC_net** equals the number of logical statements in the unit. This is
 the most accurate size measure for comparing units, since it is independent
 of coding style (how many continuation lines are used per statement).
 
-**Pct_Comentario** measures documentation density. Values below 5% on units
+**Pct_Comment** measures documentation density. Values below 5% on units
 with more than 50 logical statements indicate poorly documented code.
 
-**CC_SLOC** (in `reporte_consolidado.csv`) = `CC / SLOC_neto`. Measures
+**CC_SLOC** (in `report_consolidated.csv`) = `CC / SLOC_net`. Measures
 cyclomatic complexity density — how many decision points exist per logical
 statement. More useful than raw CC for comparing units of different sizes.

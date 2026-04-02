@@ -3,41 +3,41 @@ from collections import defaultdict
 from pathlib import Path
 
 import forti4d.lib.reader_logical as reader_logical
-from forti4d.analyzers.inventario import cargar_inventario
-from forti4d.config import CARPETA_CODIGO, RUTA_RESULTADOS
+from forti4d.analyzers.inventory import load_inventory
+from forti4d.config import CODE_PATH, RESULTS_PATH
 
 # =============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # =============================================================================
-SALIDA_CSV = RUTA_RESULTADOS / "reporte_sloc.csv"
+CSV_OUTPUT = RESULTS_PATH / "report_sloc.csv"
 
 
 # =============================================================================
-# CLASIFICACIÓN DE LÍNEAS FÍSICAS
+# PHYSICAL LINE CLASSIFICATION
 # =============================================================================
 
-# Categorías
-BLANK        = "BLANK"
-COMMENT      = "COMMENT"
+# Categories
+BLANK = "BLANK"
+COMMENT = "COMMENT"
 CONTINUATION = "CONTINUATION"
-CODE         = "CODE"
+CODE = "CODE"
 
 
-def clasificar_fisicas(sentencias: list) -> dict:
+def classify_physical(sentences: list) -> dict:
     """
-    A partir de la lista de LogicalLines devuelta por reader_logical,
-    construye un dict  linea_fisica (int) -> categoría (str).
+    From the list of LogicalLines returned by reader_logical,
+    builds a dict  physical_line (int) -> category (str).
 
-    Reglas:
+    Rules:
       - LogicalLine.is_comment=True           → COMMENT
-      - LogicalLine con texto vacío/blanco     → BLANK
-      - LogicalLine con código, 1 raw_line     → CODE  (sentencia de una línea)
-      - LogicalLine con código, varias raw_lines:
-          · primera raw_line                  → CODE
-          · las demás                         → CONTINUATION
+      - LogicalLine with empty/blank text      → BLANK
+      - LogicalLine with code, 1 raw_line      → CODE  (single-line statement)
+      - LogicalLine with code, multiple raw_lines:
+          · first raw_line                    → CODE
+          · the rest                          → CONTINUATION
     """
     result = {}
-    for s in sentencias:
+    for s in sentences:
         if s.is_comment:
             for lineno, _ in s.raw_lines:
                 result[lineno] = COMMENT
@@ -51,165 +51,168 @@ def clasificar_fisicas(sentencias: list) -> dict:
 
 
 # =============================================================================
-# ANÁLISIS PRINCIPAL
+# MAIN ANALYSIS
 # =============================================================================
 
-def analizar_sloc():
-    print("--- Contador SLOC Preciso ---")
 
-    # 1. Cargar inventario
+def analize_sloc():
+    print("--- Precise SLOC Counter ---")
+
+    # 1. Load inventory
     try:
-        inventario_lista = cargar_inventario()
+        inventory_list = load_inventory()
     except Exception as e:
-        print(f"ERROR cargando inventario: {e}")
+        print(f"ERROR loading inventory: {e}")
         return
 
-    if not inventario_lista:
-        print("El inventario está vacío.")
+    if not inventory_list:
+        print("Inventory is empty.")
         return
 
-    # Convertir tipos numéricos y agrupar por archivo
-    mapa_unidades = defaultdict(list)
-    for u in inventario_lista:
-        archivo = u.get("Archivo", "").strip()
-        if not archivo:
+    # Convert numeric types and group by file
+    units_map = defaultdict(list)
+    for u in inventory_list:
+        file = u.get("File", "").strip()
+        if not file:
             continue
         try:
-            u["Linea_Inicio"] = int(u["Linea_Inicio"])
-            u["Linea_Fin"]    = int(u["Linea_Fin"])
+            u["Start_Line"] = int(u["Start_Line"])
+            u["End_Line"] = int(u["End_Line"])
         except (ValueError, KeyError):
-            u["Linea_Inicio"] = 0
-            u["Linea_Fin"]    = 0
-        mapa_unidades[archivo].append(u)
+            u["Start_Line"] = 0
+            u["End_Line"] = 0
+        units_map[file].append(u)
 
-    ruta_codigo       = CARPETA_CODIGO
-    archivos_ordenados = sorted(mapa_unidades.keys(), key=str.lower)
-    datos_salida       = []
+    code_path_ = CODE_PATH
+    sorted_files = sorted(units_map.keys(), key=str.lower)
+    output_data = []
 
-    for idx, nombre_archivo in enumerate(archivos_ordenados):
-        ruta_fisica = ruta_codigo / nombre_archivo
-        print(f"  [{idx+1}/{len(archivos_ordenados)}] {nombre_archivo}")
+    for idx, file_name in enumerate(sorted_files):
+        physical_path = code_path_ / file_name
+        print(f"  [{idx+1}/{len(sorted_files)}] {file_name}")
 
         try:
-            sentencias = reader_logical.read_logical_lines(ruta_fisica)
+            sentences = reader_logical.read_logical_lines(physical_path)
         except Exception as e:
-            print(f"    -> Error leyendo: {e}")
+            print(f"    -> Error reading: {e}")
             continue
 
-        # Clasificar líneas físicas
-        clasif = clasificar_fisicas(sentencias)
+        # Classify physical lines
+        classif = classify_physical(sentences)
 
-        if not clasif:
+        if not classif:
             continue
 
-        # Ordenar unidades por Linea_Inicio para scope resolution
-        unidades = sorted(mapa_unidades[nombre_archivo], key=lambda u: u["Linea_Inicio"])
+        # Sort units by Start_Line for scope resolution
+        units = sorted(units_map[file_name], key=lambda u: u["Start_Line"])
 
-        # Acumuladores por unidad: { nombre_unidad -> { cat -> count } }
-        contadores = defaultdict(lambda: defaultdict(int))
+        # Accumulators per unit: { unit_name -> { cat -> count } }
+        counters = defaultdict(lambda: defaultdict(int))
 
-        for lineno, cat in clasif.items():
-            # Scope: unidad más interna que contenga lineno
-            candidatos = [
-                u for u in unidades
-                if u["Linea_Inicio"] <= lineno <= u["Linea_Fin"]
-            ]
-            if candidatos:
-                scope = max(candidatos, key=lambda u: u["Linea_Inicio"])["Nombre"]
+        for lineno, cat in classif.items():
+            # Scope: innermost unit containing lineno
+            candidates = [u for u in units if u["Start_Line"] <= lineno <= u["End_Line"]]
+            if candidates:
+                scope = max(candidates, key=lambda u: u["Start_Line"])["Name"]
             else:
                 scope = "GLOBAL"
-            contadores[scope][cat] += 1
+            counters[scope][cat] += 1
 
-        # Construir filas de salida
-        for u in unidades:
-            nombre = u["Nombre"]
-            c      = contadores[nombre]
+        # Build output rows
+        for u in units:
+            uname = u["Name"]
+            c = counters[uname]
 
-            loc          = c[BLANK] + c[COMMENT] + c[CODE] + c[CONTINUATION]
-            n_blank      = c[BLANK]
-            n_comment    = c[COMMENT]
-            n_cont       = c[CONTINUATION]
-            sloc_fisico  = loc - n_blank - n_comment          # incluye continuaciones
-            sloc_neto    = sloc_fisico - n_cont               # = sentencias lógicas de código
-            pct_comment  = round(n_comment / loc * 100, 1) if loc > 0 else 0.0
+            loc = c[BLANK] + c[COMMENT] + c[CODE] + c[CONTINUATION]
+            n_blank = c[BLANK]
+            n_comment = c[COMMENT]
+            n_cont = c[CONTINUATION]
+            sloc_physical = loc - n_blank - n_comment  # includes continuations
+            sloc_net = sloc_physical - n_cont  # = logical code statements
+            pct_comment = round(n_comment / loc * 100, 1) if loc > 0 else 0.0
 
-            datos_salida.append({
-                "Archivo":       nombre_archivo,
-                "Unidad":        nombre,
-                "Tipo":          u.get("Tipo", "UNKNOWN"),
-                "LOC":           loc,
-                "N_Blancos":     n_blank,
-                "N_Comentarios": n_comment,
-                "N_Continuacion":n_cont,
-                "SLOC_fisico":   sloc_fisico,
-                "SLOC_neto":     sloc_neto,
-                "Pct_Comentario":pct_comment,
-            })
+            output_data.append(
+                {
+                    "File": file_name,
+                    "Unit": uname,
+                    "Type": u.get("Type", "UNKNOWN"),
+                    "LOC": loc,
+                    "N_Blank": n_blank,
+                    "N_Comments": n_comment,
+                    "N_Continuation": n_cont,
+                    "SLOC_physical": sloc_physical,
+                    "SLOC_net": sloc_net,
+                    "Pct_Comment": pct_comment,
+                }
+            )
 
-    if not datos_salida:
-        print("Sin datos para exportar.")
+    if not output_data:
+        print("No data to export.")
         return
 
-    # Ordenar por SLOC_neto descendente
-    datos_salida.sort(key=lambda x: -x["SLOC_neto"])
+    # Sort by descending SLOC_net
+    output_data.sort(key=lambda x: -x["SLOC_net"])
 
-    # Exportar
-    columnas = [
-        "Archivo", "Unidad", "Tipo",
-        "LOC", "N_Blancos", "N_Comentarios", "N_Continuacion",
-        "SLOC_fisico", "SLOC_neto", "Pct_Comentario",
+    # Export
+    columns = [
+        "File",
+        "Unit",
+        "Type",
+        "LOC",
+        "N_Blank",
+        "N_Comments",
+        "N_Continuation",
+        "SLOC_physical",
+        "SLOC_net",
+        "Pct_Comment",
     ]
-    with open(SALIDA_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=columnas)
+    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
-        w.writerows(datos_salida)
+        w.writerows(output_data)
 
-    # Resumen en consola
-    total_loc         = sum(r["LOC"]           for r in datos_salida)
-    total_blank       = sum(r["N_Blancos"]      for r in datos_salida)
-    total_comment     = sum(r["N_Comentarios"]  for r in datos_salida)
-    total_cont        = sum(r["N_Continuacion"] for r in datos_salida)
-    total_sloc_fisico = sum(r["SLOC_fisico"]    for r in datos_salida)
-    total_sloc_neto   = sum(r["SLOC_neto"]      for r in datos_salida)
+    # Console summary
+    total_loc = sum(r["LOC"] for r in output_data)
+    total_blank = sum(r["N_Blank"] for r in output_data)
+    total_comment = sum(r["N_Comments"] for r in output_data)
+    total_cont = sum(r["N_Continuation"] for r in output_data)
+    total_sloc_physycal = sum(r["SLOC_physical"] for r in output_data)
+    total_sloc_net = sum(r["SLOC_net"] for r in output_data)
 
-    # Totales por archivo (solo unidades raíz para no doblar conteo)
-    # Nota: sumamos todos porque la mayoría son no-solapables (distintos rangos)
-    # Para un total de archivo real usamos el mayor LOC por archivo
-    archivos_loc = defaultdict(int)
-    for r in datos_salida:
-        # Acumulamos el LOC raíz (Padre==GLOBAL) por archivo
-        archivos_loc[r["Archivo"]] = max(archivos_loc[r["Archivo"]], r["LOC"])
+    # Totals by file (root units only to avoid double-counting)
+    # Note: we sum all because most are non-overlapping (different ranges)
+    # For a real per-file total we use the max LOC per file
+    files_loc = defaultdict(int)
+    for r in output_data:
+        # Accumulate root LOC (Parent==GLOBAL) per file
+        files_loc[r["File"]] = max(files_loc[r["File"]], r["LOC"])
 
-    print(f"\nResumen global:")
-    print(f"  LOC total (físico, corpus)   : {sum(archivos_loc.values()):>8,}")
-    print(f"  Líneas en blanco             : {total_blank:>8,}")
-    print(f"  Líneas comentario            : {total_comment:>8,}")
-    print(f"  Líneas continuación          : {total_cont:>8,}")
-    print(f"  SLOC físico                  : {total_sloc_fisico:>8,}  (código sin blancos/comentarios)")
-    print(f"  SLOC neto                    : {total_sloc_neto:>8,}  (sentencias lógicas)")
+    print(f"\nGlobal summary:")
+    print(f"  Total LOC (physical, corpus) : {sum(files_loc.values()):>8,}")
+    print(f"  Blank lines                  : {total_blank:>8,}")
+    print(f"  Comment lines                : {total_comment:>8,}")
+    print(f"  Continuation lines           : {total_cont:>8,}")
+    print(f"  Physical SLOC                : {total_sloc_physycal:>8,}  (code without blanks/comments)")
+    print(f"  Net SLOC                     : {total_sloc_net:>8,}  (logical statements)")
 
-    loc_corpus = sum(archivos_loc.values())
+    loc_corpus = sum(files_loc.values())
     if loc_corpus > 0:
-        print(f"  Densidad comentario (corpus) : {total_comment/loc_corpus*100:>7.1f}%")
+        print(f"  Comment density (corpus)     : {total_comment/loc_corpus*100:>7.1f}%")
 
-    print(f"\nTop 10 unidades más grandes (SLOC neto):")
-    for r in datos_salida[:10]:
-        pct = f"{r['Pct_Comentario']:4.1f}%"
-        print(f"  {r['SLOC_neto']:5}  sloc  {r['Pct_Comentario']:4.1f}% coment  "
-              f"{r['Archivo']:25} {r['Unidad']}")
+    print(f"\nTop 10 largest units (net SLOC):")
+    for r in output_data[:10]:
+        pct = f"{r['Pct_Comment']:4.1f}%"
+        print(f"  {r['SLOC_net']:5}  sloc  {r['Pct_Comment']:4.1f}% comment  " f"{r['File']:25} {r['Unit']}")
 
-    # Unidades sin ningún comentario
-    sin_comentarios = [
-        r for r in datos_salida
-        if r["N_Comentarios"] == 0 and r["SLOC_neto"] > 10
-    ]
-    if sin_comentarios:
-        print(f"\nUnidades con >10 sentencias y 0 comentarios ({len(sin_comentarios)}):")
-        for r in sorted(sin_comentarios, key=lambda x: -x["SLOC_neto"])[:15]:
-            print(f"  {r['SLOC_neto']:5}  sloc  {r['Archivo']:25} {r['Unidad']}")
+    # Units with no comments at all
+    no_comments = [r for r in output_data if r["N_Comments"] == 0 and r["SLOC_net"] > 10]
+    if no_comments:
+        print(f"\nUnits with >10 statements and 0 comments ({len(no_comments)}):")
+        for r in sorted(no_comments, key=lambda x: -x["SLOC_net"])[:15]:
+            print(f"  {r['SLOC_net']:5}  sloc  {r['File']:25} {r['Unit']}")
 
-    print(f"\nGenerado: {SALIDA_CSV}")
+    print(f"\nGenerated: {CSV_OUTPUT}")
 
 
 if __name__ == "__main__":
-    analizar_sloc()
+    analize_sloc()

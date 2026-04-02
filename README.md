@@ -1,12 +1,41 @@
 # Fortran Static Analysis Toolkit
 
-A collection of Python scripts for static analysis of Fortran source code.
-Designed to work with real-world hybrid Fortran corpora (mixed F77/F90),
+A Python toolkit for static analysis of Fortran source code.
+Designed to work with real-world hybrid Fortran corpora (mixed F77/F90/F95),
 where general-purpose parsers typically fail.
 
-> **Language note:** Source code, variable names, CSV column headers, and
-> console output are currently in Spanish. Migration to English is planned
-> for a future release.
+---
+
+## Fortran Standard Support
+
+| Standard | Support |
+| :--- | :--- |
+| FORTRAN 77 (F77) | Full — fixed-form, COMMON, EQUIVALENCE, IMPLICIT, BLOCK DATA |
+| Fortran 90 (F90) | Full — free-form, modules, USE, derived types, INTERFACE blocks |
+| Fortran 95 (F95) | Full — FORALL, WHERE, PURE/ELEMENTAL attributes |
+| Fortran 2003+ | Not supported (see Future Work) |
+
+---
+
+## Installation
+
+```bash
+pip install forti4d
+```
+
+---
+
+## Quick Start
+
+```bash
+forti4d                                        # run full 19-step pipeline
+forti4d --project ../myproject --output out/   # specify source and output dirs
+forti4d --list                                 # show all pipeline steps
+forti4d --from symbols                         # resume from a specific step
+forti4d --quiet                                # suppress step output
+```
+
+See `doc/scripts/pipeline.md` for all flags and options.
 
 ---
 
@@ -14,31 +43,8 @@ where general-purpose parsers typically fail.
 
 - Python 3.8+
 - [Graphviz](https://graphviz.org/) — only required for rendering `.dot` files
-  produced by `grafo_visual.py`
+  produced by `visual_graph.py`
 - No third-party Python packages — standard library only
-
----
-
-## Input
-
-Source directory and output directory are configured via environment variables
-`FORT_SRC` and `FORT_OUT`, with fallbacks in `config.py`.
-
----
-
-## Quick Start
-
-Run the full 18-step pipeline with a single command:
-
-```bash
-python pipeline.py
-python pipeline.py --project ../myproject --output out/
-python pipeline.py --list          # show all steps
-python pipeline.py --from simbolos # resume from a specific step
-python pipeline.py --quiet         # suppress script output
-```
-
-See `doc/scripts/pipeline.md` for all flags and options.
 
 ---
 
@@ -47,48 +53,48 @@ See `doc/scripts/pipeline.md` for all flags and options.
 The 19 steps in dependency order:
 
 ```
-inventario.py          →  reporte_inventario.csv
-dependencias.py        →  dep_00_ambiguedades.csv
-                          dep_01_datos_maestros.csv
-                          dep_02_grafo_unidades.csv
-                          dep_03_matriz_impacto.csv
-                          dep_04_externos_huerfanos.csv
-                          dep_05_dependencia_archivos.csv
-                          dep_06_include_files.csv
-perfilador.py          →  reporte_densidad.csv
-                          audit/<file>_DEBUG.csv  (one per source file)
-analisis_bloques_v8.py →  bloques/<file>_bloques.txt  (batch, one per source file)
-analisis_estructura.py →  analisis_nodos_criticos.csv
-analisis_cruzado.py    →  reporte_estrategia_migracion.csv
-resumen_ejecutivo.py   →  RESUMEN_PROYECTO.md
-                          estadisticas_por_archivo.csv
-complejidad.py         →  reporte_complejidad.csv
-common_blocks.py       →  common_uso.csv
-                          common_acoplamiento.csv
+inventory.py          →  inventory_report.csv
+dependencies.py       →  dep_00_ambiguities.csv
+                         dep_01_master_data.csv
+                         dep_02_unit_graph.csv
+                         dep_03_impact_matrix.csv
+                         dep_04_external_orphans.csv
+                         dep_05_file_dependencies.csv
+                         dep_06_include_files.csv
+profiler.py           →  report_density.csv
+                         audit/<file>_DEBUG.csv  (one per source file)
+block_analysis.py     →  blocks/<file>_blocks.txt  (one per source file)
+structure_analysis.py →  report_structure_analysis.csv
+cross_analysis.py     →  report_migration_strategy.csv
+executive_summary.py  →  PROJECT_SUMMARY.md
+                         file_statistics.csv
+complexity.py         →  report_complexity.csv
+common_blocks.py      →  common_usage.csv
+                         common_coupling.csv
 ─── E4 ScopeManager ──────────────────────────────────────────────────────────
-simbolos.py            →  simbolos_variables.csv
-                          simbolos_firmas.csv
-                          simbolos_implicit.csv
-tipos_derivados.py     →  tipos_definicion.csv
-                          tipos_componentes.csv
-equivalencias.py       →  equivalencias.csv
+symbols.py            →  symbol_variables.csv
+                         symbol_signatures.csv
+                         symbol_implicit.csv
+derived_types.py      →  type_definitions.csv
+                         type_components.csv
+equivalences.py       →  equivalences.csv
 ─── ──────────────────────────────────────────────────────────────────────────
-alcanzabilidad.py      →  reporte_alcanzabilidad.csv
-sloc.py                →  reporte_sloc.csv
-clones.py              →  reporte_clones.csv
-consolidar.py          →  reporte_consolidado.csv
-grafo_visual.py        →  grafo_*.dot
-priorizacion.py        →  reporte_priorizacion.csv
-reporte_html.py        →  reporte.html
+reachability.py       →  report_reachability.csv
+sloc.py               →  report_sloc.csv
+clones.py             →  report_clones.csv
+consolidate.py        →  report_consolidated.csv
+visual_graph.py       →  graph_*.dot
+prioritization.py     →  report_prioritization.csv
+html_report.py        →  report.html
 ```
 
-> `perfilador.py` must run before `complejidad.py`, `common_blocks.py`,
-> `simbolos.py`, `tipos_derivados.py`, and `equivalencias.py` — all read
+> `profiler.py` must run before `complexity.py`, `common_blocks.py`,
+> `symbols.py`, `derived_types.py`, and `equivalences.py` — all read
 > the `audit/*_DEBUG.csv` files it produces.
 >
-> `consolidar.py` must run after all analysis scripts — it joins all reports.
+> `consolidate.py` must run after all analysis scripts — it joins all reports.
 >
-> `priorizacion.py` must run after `consolidar.py`.
+> `prioritization.py` must run after `consolidate.py`.
 
 ---
 
@@ -96,50 +102,50 @@ reporte_html.py        →  reporte.html
 
 | File | Produced by | Description |
 | :--- | :--- | :--- |
-| `reporte_inventario.csv` | `inventario.py` | All program units with type, line range, and audit flags |
-| `dep_00_ambiguedades.csv` | `dependencias.py` | Units defined in more than one source file |
-| `dep_01_datos_maestros.csv` | `dependencias.py` | Raw call/use relationships |
-| `dep_02_grafo_unidades.csv` | `dependencias.py` | Resolved call graph (CALL, USE, FUNC_CALL edges) |
-| `dep_03_matriz_impacto.csv` | `dependencias.py` | Fan-In and Fan-Out per unit |
-| `dep_04_externos_huerfanos.csv` | `dependencias.py` | External references with no known definition in the corpus |
-| `dep_05_dependencia_archivos.csv` | `dependencias.py` | File-level dependency summary |
-| `dep_06_include_files.csv` | `dependencias.py` | INCLUDE file references with existence status |
-| `reporte_densidad.csv` | `perfilador.py` | Statement density profile per unit (% calculation, control, I/O, legacy) |
-| `audit/<file>_DEBUG.csv` | `perfilador.py` | Per-line statement classification for each source file |
-| `bloques/<file>_bloques.txt` | `analisis_bloques_v8.py` | Block topology per source file |
-| `analisis_nodos_criticos.csv` | `analisis_estructura.py` | Structural categories (islands, hubs, entry points, etc.) |
-| `reporte_estrategia_migracion.csv` | `analisis_cruzado.py` | Migration strategy per unit |
-| `RESUMEN_PROYECTO.md` | `resumen_ejecutivo.py` | Executive summary in Markdown |
-| `estadisticas_por_archivo.csv` | `resumen_ejecutivo.py` | Per-file summary statistics |
-| `reporte_complejidad.csv` | `complejidad.py` | McCabe cyclomatic complexity per unit |
-| `common_uso.csv` | `common_blocks.py` | COMMON block usage per unit |
-| `common_acoplamiento.csv` | `common_blocks.py` | COMMON block coupling risk |
-| `simbolos_variables.csv` | `simbolos.py` | Variable and PARAMETER constant declarations per unit |
-| `simbolos_firmas.csv` | `simbolos.py` | Formal arguments per subroutine/function |
-| `simbolos_implicit.csv` | `simbolos.py` | IMPLICIT rules per unit |
-| `tipos_definicion.csv` | `tipos_derivados.py` | Derived TYPE definitions with host unit and component count |
-| `tipos_componentes.csv` | `tipos_derivados.py` | Component fields of each derived TYPE |
-| `equivalencias.csv` | `equivalencias.py` | EQUIVALENCE aliasing groups (union-find) |
-| `reporte_alcanzabilidad.csv` | `alcanzabilidad.py` | Reachability from entry points (dead code detection) |
-| `reporte_sloc.csv` | `sloc.py` | Precise SLOC count per unit (LOC, blanks, comments, continuations) |
-| `reporte_clones.csv` | `clones.py` | Identical/similar/diverged duplicate unit pairs |
-| `reporte_consolidado.csv` | `consolidar.py` | All metrics joined — one row per unit, 34 columns |
-| `grafo_*.dot` | `grafo_visual.py` | Graphviz call graph (full, simplified, or per entry point) |
-| `reporte_priorizacion.csv` | `priorizacion.py` | Units ranked by composite migration risk score |
-| `reporte.html` | `reporte_html.py` | Self-contained HTML report — filterable and sortable unit table |
+| `inventory_report.csv` | `inventory.py` | All program units with type, line range, and audit flags |
+| `dep_00_ambiguities.csv` | `dependencies.py` | Units defined in more than one source file |
+| `dep_01_master_data.csv` | `dependencies.py` | Raw call/use relationships |
+| `dep_02_unit_graph.csv` | `dependencies.py` | Resolved call graph (CALL, USE, FUNC_CALL edges) |
+| `dep_03_impact_matrix.csv` | `dependencies.py` | Fan-In and Fan-Out per unit |
+| `dep_04_external_orphans.csv` | `dependencies.py` | External references with no known definition in the corpus |
+| `dep_05_file_dependencies.csv` | `dependencies.py` | File-level dependency summary |
+| `dep_06_include_files.csv` | `dependencies.py` | INCLUDE file references with existence status |
+| `report_density.csv` | `profiler.py` | Statement density profile per unit (% calculation, control, I/O, legacy) |
+| `audit/<file>_DEBUG.csv` | `profiler.py` | Per-line statement classification for each source file |
+| `blocks/<file>_blocks.txt` | `block_analysis.py` | Block topology per source file |
+| `report_structure_analysis.csv` | `structure_analysis.py` | Structural categories (islands, hubs, entry points, etc.) |
+| `report_migration_strategy.csv` | `cross_analysis.py` | Migration strategy per unit |
+| `PROJECT_SUMMARY.md` | `executive_summary.py` | Executive summary in Markdown |
+| `file_statistics.csv` | `executive_summary.py` | Per-file summary statistics |
+| `report_complexity.csv` | `complexity.py` | McCabe cyclomatic complexity per unit |
+| `common_usage.csv` | `common_blocks.py` | COMMON block usage per unit |
+| `common_coupling.csv` | `common_blocks.py` | COMMON block coupling risk |
+| `symbol_variables.csv` | `symbols.py` | Variable and PARAMETER constant declarations per unit |
+| `symbol_signatures.csv` | `symbols.py` | Formal arguments per subroutine/function |
+| `symbol_implicit.csv` | `symbols.py` | IMPLICIT rules per unit |
+| `type_definitions.csv` | `derived_types.py` | Derived TYPE definitions with host unit and component count |
+| `type_components.csv` | `derived_types.py` | Component fields of each derived TYPE |
+| `equivalences.csv` | `equivalences.py` | EQUIVALENCE aliasing groups (union-find) |
+| `report_reachability.csv` | `reachability.py` | Reachability from entry points (dead code detection) |
+| `report_sloc.csv` | `sloc.py` | Precise SLOC count per unit (LOC, blanks, comments, continuations) |
+| `report_clones.csv` | `clones.py` | Identical/similar/diverged duplicate unit pairs |
+| `report_consolidated.csv` | `consolidate.py` | All metrics joined — one row per unit |
+| `graph_*.dot` | `visual_graph.py` | Graphviz call graph (full, simplified, or per entry point) |
+| `report_prioritization.csv` | `prioritization.py` | Units ranked by composite migration risk score |
+| `report.html` | `html_report.py` | Self-contained HTML report — filterable and sortable unit table |
 
 ---
 
 ## Support Scripts
 
-These are not run directly but are imported by the pipeline scripts:
+These are not run directly but are imported by the pipeline:
 
 | File | Role |
 | :--- | :--- |
 | `config.py` | Centralized path configuration — reads `FORT_SRC` / `FORT_OUT` env vars |
 | `reader_logical.py` | Fortran logical line reader — handles F77 fixed-form and F90 free-form continuation |
-| `patterns_v1.py` | Regex patterns for unit boundaries (used by `inventario.py`) |
-| `patterns_v2.py` | Extended regex patterns for statement classification (used by `perfilador.py`) |
+| `patterns_v1.py` | Regex patterns for unit boundaries (used by `inventory.py`) |
+| `patterns_v2.py` | Extended regex patterns for statement classification (used by `profiler.py`) |
 | `kinds.py` | Enum of statement kinds |
 
 ---
@@ -147,7 +153,9 @@ These are not run directly but are imported by the pipeline scripts:
 ## Documentation
 
 Detailed documentation for each script is in `doc/scripts/`. Architecture
-overview and design decisions are in `doc/arquitectura.md`.
+overview and design decisions are in `doc/architecture.md`.
+
+For development setup and contribution guidelines, see `CONTRIBUTING.md`.
 
 ---
 
@@ -158,14 +166,48 @@ overview and design decisions are in `doc/arquitectura.md`.
   Fortran code. This is intentional — general-purpose Fortran parsers
   (fparser, OFP) are unreliable on real-world legacy codebases.
 
-- **Scope resolution** is based on the line ranges (`Linea_Inicio`,
-  `Linea_Fin`) recorded in the inventory. Every metric is attributed to
-  the innermost program unit containing the statement's line number.
+- **Scope resolution** is based on the line ranges (`Start_Line`, `End_Line`)
+  recorded in the inventory. Every metric is attributed to the innermost
+  program unit containing the statement's line number.
 
 - **Entry points** are units with type `PROGRAM` or `IMPLICIT-MAIN`
   (files that compile to an executable without an explicit `PROGRAM`
   statement). The corpus may contain several — one per executable.
 
-- **E4 ScopeManager** scripts (`simbolos.py`, `tipos_derivados.py`,
-  `equivalencias.py`) populate the symbol-level layer of the analysis:
+- **E4 ScopeManager** scripts (`symbols.py`, `derived_types.py`,
+  `equivalences.py`) populate the symbol-level layer of the analysis:
   what is declared inside each unit, not just that the unit exists.
+
+---
+
+## Known Limitations
+
+- **Fortran 2003+ not supported.** OOP features (`CLASS`, `TYPE EXTENDS`,
+  procedure pointers, `BIND(C)`) are not detected or analyzed.
+- **Preprocessor directives** (`#ifdef`, `#include` via cpp) are not
+  expanded — only native Fortran `INCLUDE` statements are tracked.
+- **INCLUDE files** are detected and cross-referenced but not recursively
+  analyzed as independent units.
+- **Assumed character lengths** (`CHARACTER*(*)`) may not be fully captured
+  in symbol signatures.
+- **ENTRY statements** are flagged in the audit but not modeled as
+  independent callable units in the inventory.
+
+---
+
+## Future Work
+
+- **Fortran 2003:** CLASS hierarchy, TYPE EXTENDS, BIND(C), procedure
+  pointers, deferred-length strings.
+- **Fortran 2008:** Submodules, BLOCK construct, DO CONCURRENT,
+  CRITICAL/SYNC primitives.
+- **Fortran 2018:** Teams, events, collective subroutines (Coarray Fortran).
+- **Deeper INCLUDE analysis:** Recursive parsing of included files as
+  first-class units.
+- **PyPI packaging** after v1.0 GitHub release.
+
+---
+
+## License
+
+MIT — see `LICENSE`.

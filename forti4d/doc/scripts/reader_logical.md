@@ -6,7 +6,7 @@ Core Fortran line reader. Merges physical lines into logical lines, handling
 continuation in both F77 fixed-form (column 6 marker) and F90 free-form
 (`&` at end of line). Identifies comment lines and blank lines.
 
-Not run directly. Imported by `inventario.py`, `perfilador.py`, and `sloc.py`.
+Not run directly. Imported by `inventory.py`, `profiler.py`, and `sloc.py`.
 
 ---
 
