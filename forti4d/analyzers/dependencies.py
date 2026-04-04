@@ -320,12 +320,13 @@ def load_inventory_enhanced(report_ambiguities=False) -> Tuple[Dict, Dict]:
     return inventory, file_map
 
 
-def scan_file(file_path: Path) -> List[Dict]:
+def scan_file(file_path: Path, source_path: Path = None) -> List[Dict]:
     """
     Scans a file and returns a list of raw dependencies.
     Scans dependencies while tracking the Scope (Parent) of the caller.
     """
     raw_deps = []
+    rel_path = str(file_path.relative_to(source_path)) if source_path else file_path.name
 
     try:
         logical_lines = read_logical_lines(str(file_path))
@@ -425,7 +426,7 @@ def scan_file(file_path: Path) -> List[Dict]:
             target = m_inc.group(1)
             raw_deps.append(
                 {
-                    "source_file": file_path.name,
+                    "source_file": rel_path,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
@@ -443,7 +444,7 @@ def scan_file(file_path: Path) -> List[Dict]:
             target = m_use.group(1).upper()
             raw_deps.append(
                 {
-                    "source_file": file_path.name,
+                    "source_file": rel_path,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
@@ -466,7 +467,7 @@ def scan_file(file_path: Path) -> List[Dict]:
 
             raw_deps.append(
                 {
-                    "source_file": file_path.name,
+                    "source_file": rel_path,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
@@ -498,7 +499,7 @@ def scan_file(file_path: Path) -> List[Dict]:
             # We add it as a candidate. Resolution will determine if it is an array or function.
             raw_deps.append(
                 {
-                    "source_file": file_path.name,
+                    "source_file": rel_path,
                     "source_unit": current_unit_name,
                     "source_type": current_unit_type,
                     "source_parent": current_scope,
@@ -526,7 +527,7 @@ def main():
     all_raw_deps = []
     for f in files:
         # print(f"  Scanning: {f.name}")
-        all_raw_deps.extend(scan_file(f))
+        all_raw_deps.extend(scan_file(f, source_path))
 
     # 3. Resolution and Cross-matching
     master_rows = []

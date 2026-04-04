@@ -90,8 +90,8 @@ def analyze_common():
     # Type conversion and grouping by file
     units_map = defaultdict(list)
     for u in inventory_list:
-        file = u.get("File", "").strip()
-        if not file:
+        rel = u.get("Relative_Path") or u.get("File", "").strip()
+        if not rel:
             continue
         try:
             u["Start_Line"] = int(u["Start_Line"])
@@ -99,7 +99,7 @@ def analyze_common():
         except (ValueError, KeyError):
             u["Start_Line"] = 0
             u["End_Line"] = 0
-        units_map[file].append(u)
+        units_map[rel].append(u)
 
     # Result structure:
     # usage[(file, drive)] = Counter(block -> n occurrences)
@@ -116,12 +116,14 @@ def analyze_common():
 
     total_common = 0
 
-    for file_name in sorted_files:
-        debug_file = audit_path_ / f"{file_name}_DEBUG.csv"
+    for rel_path in sorted_files:
+        file_name = Path(rel_path).name
+        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+        debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
         if not debug_file.exists():
             continue
 
-        units_on_file = sorted(units_map[file_name], key=lambda u: u["Start_Line"])
+        units_on_file = sorted(units_map[rel_path], key=lambda u: u["Start_Line"])
 
         with open(debug_file, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):

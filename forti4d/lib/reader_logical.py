@@ -112,6 +112,46 @@ def extract_label_from_line(line: str, format_type: str) -> Optional[str]:
     return None
 
 
+# FORMAT DETECTION
+
+
+def detect_fortran_format(filepath: str) -> str:
+    """
+    Heuristically detects fixed-form vs free-form by scanning the first 50
+    non-blank lines. Returns 'free' on first match, 'fixed' if none found.
+
+    Free-form indicators (any one is sufficient):
+    - '!' anywhere in the line (not valid in strict F77)
+    - Alphabetic character in columns 1-5 (F77 only allows digits/spaces
+      there, except C/c/* in column 1 for comments)
+    - '::' attribute separator (F90+)
+    - '&' at end of code portion (F90 line continuation)
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            for i, line in enumerate(f):
+                if i >= 50:
+                    break
+                raw = line.rstrip("\n")
+                if not raw.strip():
+                    continue
+                first_char = raw[0] if raw else ""
+                if first_char.upper() in ("C", "*"):
+                    continue  # classic F77 comment — not indicative
+                if "!" in raw:
+                    return "free"
+                label_field = raw[:5] if len(raw) >= 5 else raw
+                if any(c.isalpha() for c in label_field):
+                    return "free"
+                if "::" in raw:
+                    return "free"
+                if raw.split("!")[0].rstrip().endswith("&"):
+                    return "free"
+    except Exception:
+        pass
+    return "fixed"
+
+
 # LOGICAL LINE READER (CORE LOGIC)
 
 
@@ -123,8 +163,18 @@ def read_logical_lines(filepath: str) -> List[LogicalLine]:
     """
     path_obj = Path(filepath)
 
-    # Format detection
-    is_fixed_format = path_obj.suffix.lower() in [".f", ".for", ".f77"]
+    # Format detection: extension-based initial guess, refined by content heuristic.
+    # Scientific code frequently uses .f/.F extensions with free-form F90+ syntax,
+    # or .f90 with fixed-form F77 syntax. Content takes precedence over extension.
+    is_fixed_format = path_obj.suffix.lower() in (".f", ".for", ".f77")
+    if is_fixed_format:
+        if detect_fortran_format(filepath) == "free":
+            is_fixed_format = False
+    else:
+        # .f90/.f95 etc. — check if file actually uses fixed-form syntax
+        if detect_fortran_format(filepath) == "fixed":
+            is_fixed_format = True
+
     format_type = "fixed" if is_fixed_format else "free"
 
     vlines: List[LogicalLine] = []

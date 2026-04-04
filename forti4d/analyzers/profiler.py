@@ -148,9 +148,9 @@ def analyze_density():
     # Key: Filename (str) -> Value: List of unit dicts
     map_units_file = defaultdict(list)
     for u in inventory_list:
-        file = u.get("File")
-        if file:
-            map_units_file[file].append(u)
+        rel = u.get("Relative_Path") or u.get("File", "")
+        if rel:
+            map_units_file[rel].append(u)
 
     output_data = []
 
@@ -160,18 +160,19 @@ def analyze_density():
     # Sort files alphabetically for the report
     sorted_files = sorted(map_units_file.keys(), key=lambda x: x.lower())
 
-    for idx, file_name in enumerate(sorted_files):
+    for idx, rel_path in enumerate(sorted_files):
+        file_name = Path(rel_path).name
         print(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
 
         # Get the units that belong to this file
-        units_on_file = map_units_file[file_name]
+        units_on_file = map_units_file[rel_path]
 
         # Sort by Start_Line for scope resolution
         # NOTE: We use the correct key 'Start_Line'
         units_on_file.sort(key=lambda x: x["Start_Line"])
 
-        # Build physical path
-        physical_path = files_path / file_name
+        # Build physical path using relative path to support subdirectories
+        physical_path = files_path / rel_path
 
         # Read logical lines
         try:
@@ -248,8 +249,10 @@ def analyze_density():
 
         # AUDIT
         # --- AT THE END OF FILE PROCESSING ---
-        # Generate debug CSV name: "filename_f90_DEBUG.csv"
-        debug_name = f"{file_name}_DEBUG.csv"
+        # Generate debug CSV name using sanitized relative path to avoid
+        # basename collisions when source files share names across subdirectories.
+        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+        debug_name = f"{debug_stem}_DEBUG.csv"
         debug_path = audit_path_ / debug_name
 
         # Write to disk
