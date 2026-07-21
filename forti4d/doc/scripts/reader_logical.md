@@ -16,9 +16,24 @@ Not run directly. Imported by `inventory.py`, `profiler.py`, and `sloc.py`.
 
 Reads a Fortran source file and returns a list of `LogicalLine` objects.
 
-**Format detection:** determined by file extension.
-- Fixed-form: `.f`, `.for`, `.f77`
-- Free-form: `.f90`, `.f95`, `.f03`, and all other extensions
+**Format detection:** starts from the file extension, then refined by
+content inspection via `detect_fortran_format()`.
+
+- Extension hint — fixed-form: `.f`, `.for`, `.f77` / free-form: `.f90`,
+  `.f95`, `.f03`, and all others.
+- Content override: the first 50 non-blank lines are scanned for free-form
+  indicators (`!` inline comment, alphabetic characters in columns 1–5,
+  `::` declaration separator, `&` continuation at end of line). Any of these
+  overrides the extension hint in either direction.
+
+This handles scientific HPC code that uses `.F` (preprocessed fixed-form
+extension) but is written in free-form F90+ syntax.
+
+### `detect_fortran_format(filepath) → str`
+
+Heuristic function that returns `"free"` or `"fixed"` based on content
+inspection of the first 50 non-blank lines. Called internally by
+`read_logical_lines`; not typically used directly.
 
 ### `LogicalLine` fields
 
