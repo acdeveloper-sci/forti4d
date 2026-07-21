@@ -148,7 +148,7 @@ def calculate_summary(inv_rows, dep_rows):
     unique_files = set()
 
     for r in inv_rows:
-        file = r["File"]
+        file = r.get("Relative_Path") or r["File"]
         utype = r["Type"]
         lines = r["Total_Lines"]
 

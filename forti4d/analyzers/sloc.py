@@ -180,13 +180,12 @@ def analize_sloc():
     total_sloc_physycal = sum(r["SLOC_physical"] for r in output_data)
     total_sloc_net = sum(r["SLOC_net"] for r in output_data)
 
-    # Totals by file (root units only to avoid double-counting)
-    # Note: we sum all because most are non-overlapping (different ranges)
-    # For a real per-file total we use the max LOC per file
+    # Totals by file: each physical line is attributed to exactly one unit
+    # (innermost scope), so summing all unit LOCs per file gives the correct
+    # per-file total with no double-counting.
     files_loc = defaultdict(int)
     for r in output_data:
-        # Accumulate root LOC (Parent==GLOBAL) per file
-        files_loc[r["File"]] = max(files_loc[r["File"]], r["LOC"])
+        files_loc[r["File"]] += r["LOC"]
 
     print(f"\nGlobal summary:")
     print(f"  Total LOC (physical, corpus) : {sum(files_loc.values()):>8,}")
