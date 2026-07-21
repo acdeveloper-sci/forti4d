@@ -6,6 +6,37 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
+## [0.7.1] — 2026-07-21
+
+### Fixed
+- `sloc.py`: replaced `max()` with `+=` when accumulating per-file LOC in the
+  console summary — `max()` returned only the largest unit per file, causing
+  Total LOC to appear smaller than Physical SLOC (arithmetically impossible)
+- `executive_summary.py`: group files by `Relative_Path` instead of `File`
+  (basename) — basename collisions across subdirectories caused incorrect file
+  counts and merged LOC for files sharing the same name in different directories
+- `pipeline.py`: validate `FORT_SRC` directory before executing steps —
+  provides a clear error message when the source path is missing or invalid
+- `inventory.py` + 9 analyzers (`profiler`, `sloc`, `complexity`, `symbols`,
+  `derived_types`, `equivalences`, `common_blocks`, `consolidate`,
+  `dependencies`): add `Relative_Path` column to inventory and thread it
+  through all file-access and debug-CSV naming — fixes "file not found" errors
+  for source files located in subdirectories
+- `reader_logical.py`: replace extension-only format detection with a
+  content-based heuristic (`detect_fortran_format`) — correctly handles HPC
+  code that uses `.F` extension but is written in free-form F90+ syntax
+
+### Documentation
+- `README.md`, `doc/mi4d.md`: document C preprocessor directive limitation
+  (directives not evaluated; conditional branches always captured; macros and
+  `#include` not resolved)
+- `doc/scripts/reader_logical.md`: document `detect_fortran_format()` and
+  the two-phase format detection logic
+- `doc/scripts/executive_summary.md`: update `File` column description in
+  `file_statistics.csv` to reflect relative path usage
+
+---
+
 ## [0.7.0] — 2026-04-02
 
 ### Added
