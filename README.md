@@ -1,4 +1,11 @@
-# Fortran Static Analysis Toolkit
+# Forti4D
+## Fortran Static Analysis Toolkit
+
+<!-- Badges -->
+![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 
 A Python toolkit for static analysis of Fortran source code.
 Designed to work with real-world hybrid Fortran corpora (mixed F77/F90/F95),
@@ -8,12 +15,12 @@ where general-purpose parsers typically fail.
 
 ## Fortran Standard Support
 
-| Standard | Support |
-| :--- | :--- |
-| FORTRAN 77 (F77) | Full — fixed-form, COMMON, EQUIVALENCE, IMPLICIT, BLOCK DATA |
+| Standard         | Support                                                         |
+| :--------------- | :-------------------------------------------------------------- |
+| FORTRAN 77 (F77) | Full — fixed-form, COMMON, EQUIVALENCE, IMPLICIT, BLOCK DATA    |
 | Fortran 90 (F90) | Full — free-form, modules, USE, derived types, INTERFACE blocks |
-| Fortran 95 (F95) | Full — FORALL, WHERE, PURE/ELEMENTAL attributes |
-| Fortran 2003+ | Not supported (see Future Work) |
+| Fortran 95 (F95) | Full — FORALL, WHERE, PURE/ELEMENTAL attributes                 |
+| Fortran 2003+    | Not supported (see Future Work)                                 |
 
 ---
 
@@ -100,39 +107,39 @@ html_report.py        →  report.html
 
 ## Output Files
 
-| File | Produced by | Description |
-| :--- | :--- | :--- |
-| `inventory_report.csv` | `inventory.py` | All program units with type, line range, and audit flags |
-| `dep_00_ambiguities.csv` | `dependencies.py` | Units defined in more than one source file |
-| `dep_01_master_data.csv` | `dependencies.py` | Raw call/use relationships |
-| `dep_02_unit_graph.csv` | `dependencies.py` | Resolved call graph (CALL, USE, FUNC_CALL edges) |
-| `dep_03_impact_matrix.csv` | `dependencies.py` | Fan-In and Fan-Out per unit |
-| `dep_04_external_orphans.csv` | `dependencies.py` | External references with no known definition in the corpus |
-| `dep_05_file_dependencies.csv` | `dependencies.py` | File-level dependency summary |
-| `dep_06_include_files.csv` | `dependencies.py` | INCLUDE file references with existence status |
-| `report_density.csv` | `profiler.py` | Statement density profile per unit (% calculation, control, I/O, legacy) |
-| `audit/<file>_DEBUG.csv` | `profiler.py` | Per-line statement classification for each source file |
-| `blocks/<file>_blocks.txt` | `block_analysis.py` | Block topology per source file |
-| `report_structure_analysis.csv` | `structure_analysis.py` | Structural categories (islands, hubs, entry points, etc.) |
-| `report_migration_strategy.csv` | `cross_analysis.py` | Migration strategy per unit |
-| `PROJECT_SUMMARY.md` | `executive_summary.py` | Executive summary in Markdown |
-| `file_statistics.csv` | `executive_summary.py` | Per-file summary statistics |
-| `report_complexity.csv` | `complexity.py` | McCabe cyclomatic complexity per unit |
-| `common_usage.csv` | `common_blocks.py` | COMMON block usage per unit |
-| `common_coupling.csv` | `common_blocks.py` | COMMON block coupling risk |
-| `symbol_variables.csv` | `symbols.py` | Variable and PARAMETER constant declarations per unit |
-| `symbol_signatures.csv` | `symbols.py` | Formal arguments per subroutine/function |
-| `symbol_implicit.csv` | `symbols.py` | IMPLICIT rules per unit |
-| `type_definitions.csv` | `derived_types.py` | Derived TYPE definitions with host unit and component count |
-| `type_components.csv` | `derived_types.py` | Component fields of each derived TYPE |
-| `equivalences.csv` | `equivalences.py` | EQUIVALENCE aliasing groups (union-find) |
-| `report_reachability.csv` | `reachability.py` | Reachability from entry points (dead code detection) |
-| `report_sloc.csv` | `sloc.py` | Precise SLOC count per unit (LOC, blanks, comments, continuations) |
-| `report_clones.csv` | `clones.py` | Identical/similar/diverged duplicate unit pairs |
-| `report_consolidated.csv` | `consolidate.py` | All metrics joined — one row per unit |
-| `graph_*.dot` | `visual_graph.py` | Graphviz call graph (full, simplified, or per entry point) |
-| `report_prioritization.csv` | `prioritization.py` | Units ranked by composite migration risk score |
-| `report.html` | `html_report.py` | Self-contained HTML report — filterable and sortable unit table |
+| File                            | Produced by             | Description                                                              |
+| :------------------------------ | :---------------------- | :----------------------------------------------------------------------- |
+| `inventory_report.csv`          | `inventory.py`          | All program units with type, line range, and audit flags                 |
+| `dep_00_ambiguities.csv`        | `dependencies.py`       | Units defined in more than one source file                               |
+| `dep_01_master_data.csv`        | `dependencies.py`       | Raw call/use relationships                                               |
+| `dep_02_unit_graph.csv`         | `dependencies.py`       | Resolved call graph (CALL, USE, FUNC_CALL edges)                         |
+| `dep_03_impact_matrix.csv`      | `dependencies.py`       | Fan-In and Fan-Out per unit                                              |
+| `dep_04_external_orphans.csv`   | `dependencies.py`       | External references with no known definition in the corpus               |
+| `dep_05_file_dependencies.csv`  | `dependencies.py`       | File-level dependency summary                                            |
+| `dep_06_include_files.csv`      | `dependencies.py`       | INCLUDE file references with existence status                            |
+| `report_density.csv`            | `profiler.py`           | Statement density profile per unit (% calculation, control, I/O, legacy) |
+| `audit/<file>_DEBUG.csv`        | `profiler.py`           | Per-line statement classification for each source file                   |
+| `blocks/<file>_blocks.txt`      | `block_analysis.py`     | Block topology per source file                                           |
+| `report_structure_analysis.csv` | `structure_analysis.py` | Structural categories (islands, hubs, entry points, etc.)                |
+| `report_migration_strategy.csv` | `cross_analysis.py`     | Migration strategy per unit                                              |
+| `PROJECT_SUMMARY.md`            | `executive_summary.py`  | Executive summary in Markdown                                            |
+| `file_statistics.csv`           | `executive_summary.py`  | Per-file summary statistics                                              |
+| `report_complexity.csv`         | `complexity.py`         | McCabe cyclomatic complexity per unit                                    |
+| `common_usage.csv`              | `common_blocks.py`      | COMMON block usage per unit                                              |
+| `common_coupling.csv`           | `common_blocks.py`      | COMMON block coupling risk                                               |
+| `symbol_variables.csv`          | `symbols.py`            | Variable and PARAMETER constant declarations per unit                    |
+| `symbol_signatures.csv`         | `symbols.py`            | Formal arguments per subroutine/function                                 |
+| `symbol_implicit.csv`           | `symbols.py`            | IMPLICIT rules per unit                                                  |
+| `type_definitions.csv`          | `derived_types.py`      | Derived TYPE definitions with host unit and component count              |
+| `type_components.csv`           | `derived_types.py`      | Component fields of each derived TYPE                                    |
+| `equivalences.csv`              | `equivalences.py`       | EQUIVALENCE aliasing groups (union-find)                                 |
+| `report_reachability.csv`       | `reachability.py`       | Reachability from entry points (dead code detection)                     |
+| `report_sloc.csv`               | `sloc.py`               | Precise SLOC count per unit (LOC, blanks, comments, continuations)       |
+| `report_clones.csv`             | `clones.py`             | Identical/similar/diverged duplicate unit pairs                          |
+| `report_consolidated.csv`       | `consolidate.py`        | All metrics joined — one row per unit                                    |
+| `graph_*.dot`                   | `visual_graph.py`       | Graphviz call graph (full, simplified, or per entry point)               |
+| `report_prioritization.csv`     | `prioritization.py`     | Units ranked by composite migration risk score                           |
+| `report.html`                   | `html_report.py`        | Self-contained HTML report — filterable and sortable unit table          |
 
 ---
 
@@ -140,13 +147,13 @@ html_report.py        →  report.html
 
 These are not run directly but are imported by the pipeline:
 
-| File | Role |
-| :--- | :--- |
-| `config.py` | Centralized path configuration — reads `FORT_SRC` / `FORT_OUT` env vars |
+| File                | Role                                                                                |
+| :------------------ | :---------------------------------------------------------------------------------- |
+| `config.py`         | Centralized path configuration — reads `FORT_SRC` / `FORT_OUT` env vars             |
 | `reader_logical.py` | Fortran logical line reader — handles F77 fixed-form and F90 free-form continuation |
-| `patterns_v1.py` | Regex patterns for unit boundaries (used by `inventory.py`) |
-| `patterns_v2.py` | Extended regex patterns for statement classification (used by `profiler.py`) |
-| `kinds.py` | Enum of statement kinds |
+| `patterns_v1.py`    | Regex patterns for unit boundaries (used by `inventory.py`)                         |
+| `patterns_v2.py`    | Extended regex patterns for statement classification (used by `profiler.py`)        |
+| `kinds.py`          | Enum of statement kinds                                                             |
 
 ---
 
