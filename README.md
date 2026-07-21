@@ -184,8 +184,19 @@ For development setup and contribution guidelines, see `CONTRIBUTING.md`.
 
 - **Fortran 2003+ not supported.** OOP features (`CLASS`, `TYPE EXTENDS`,
   procedure pointers, `BIND(C)`) are not detected or analyzed.
-- **Preprocessor directives** (`#ifdef`, `#include` via cpp) are not
-  expanded — only native Fortran `INCLUDE` statements are tracked.
+- **C preprocessor directives are not evaluated.** Directives such as
+  `#ifdef`, `#ifndef`, `#else`, `#endif`, `#define`, and `#include` (cpp)
+  are passed through as unrecognized lines — they are never expanded or
+  interpreted. This has several consequences for codebases that use
+  conditional compilation (common in scientific and HPC Fortran code):
+  - **Conditional dependencies are always captured**, regardless of which
+    compilation flags are active. A `USE` or `CALL` inside an `#ifdef`
+    block will appear in the dependency graph even if that block is never
+    compiled in the target configuration.
+  - **`#define` macros are not resolved.** Macro-expanded identifiers,
+    type aliases, and parameterized values are not recognized.
+  - **`#include` (cpp) is not followed.** Only native Fortran `INCLUDE`
+    statements are tracked and cross-referenced.
 - **INCLUDE files** are detected and cross-referenced but not recursively
   analyzed as independent units.
 - **Assumed character lengths** (`CHARACTER*(*)`) may not be fully captured

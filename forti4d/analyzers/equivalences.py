@@ -171,8 +171,8 @@ def extract_equivalences():
 
     units_map = defaultdict(list)
     for u in inventory_list:
-        file = u.get("File", "").strip()
-        if not file:
+        rel = u.get("Relative_Path") or u.get("File", "").strip()
+        if not rel:
             continue
         try:
             u["Start_Line"] = int(u["Start_Line"])
@@ -180,19 +180,21 @@ def extract_equivalences():
         except (ValueError, KeyError):
             u["Start_Line"] = 0
             u["End_Line"] = 0
-        units_map[file].append(u)
+        units_map[rel].append(u)
 
     rows = []
     total_n_groups = 0
     sorted_files = sorted(units_map.keys(), key=str.lower)
 
     # 2. Per file: collect EQUIVALENCE_STMT by (scope, unit_type)
-    for file_name in sorted_files:
-        debug_file = AUDIT_PATH / f"{file_name}_DEBUG.csv"
+    for rel_path in sorted_files:
+        file_name = Path(rel_path).name
+        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+        debug_file = AUDIT_PATH / f"{debug_stem}_DEBUG.csv"
         if not debug_file.exists():
             continue
 
-        units_on_file = sorted(units_map[file_name], key=lambda u: u["Start_Line"])
+        units_on_file = sorted(units_map[rel_path], key=lambda u: u["Start_Line"])
 
         # Accumulate statements per unit
         stmts_per_unit: dict[tuple, list] = defaultdict(list)

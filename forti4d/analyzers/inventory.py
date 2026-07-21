@@ -169,11 +169,12 @@ def load_inventory(csv_path=None):
     return retrieved_data
 
 
-def audit_file(file_path: Path) -> List[Dict]:
+def audit_file(file_path: Path, source_path: Path) -> List[Dict]:
+    rel_path = str(file_path.relative_to(source_path))
     try:
         logical_lines = read_logical_lines(str(file_path))
     except Exception as e:
-        return [{"File": file_path.name, "Type": "ERROR", "Name": str(e)}]
+        return [{"File": file_path.name, "Relative_Path": rel_path, "Type": "ERROR", "Name": str(e)}]
 
     if not logical_lines:
         return []
@@ -363,6 +364,7 @@ def audit_file(file_path: Path) -> List[Dict]:
         rows.append(
             {
                 "File": file_path.name,
+                "Relative_Path": rel_path,
                 "Type": u.type,
                 "Name": u.name,
                 "Parent": u.parent,
@@ -388,11 +390,12 @@ def main():
 
     data = []
     for file in files:
-        data.extend(audit_file(file))
+        data.extend(audit_file(file, source_path))
 
     if data:
         fields = [
             "File",
+            "Relative_Path",
             "Type",
             "Name",
             "Parent",

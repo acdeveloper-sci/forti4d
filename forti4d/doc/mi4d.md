@@ -32,6 +32,16 @@ hierarchy: **Workspace → Path → Source File → Physical Line**.
 lines (handling continuation). `inventory.py` and `profiler.py` build the
 physical map of the corpus (files, line ranges per unit).
 
+**E1 limitation — C preprocessor directives:** Directives such as `#ifdef`,
+`#define`, and `#include` (cpp) are treated as unrecognized physical lines and
+are never expanded. The Traceability Map (ℳ) is built from the literal source
+as written, not from the post-preprocessing view seen by the compiler. This
+means that conditional compilation blocks are invisible to the model: a symbol
+or dependency inside `#ifdef … #endif` is either always included or always
+excluded depending on whether the surrounding Fortran parser recognizes its
+enclosing unit — not on the actual compilation flags. `#include` (cpp) is
+similarly not followed; only native Fortran `INCLUDE` is tracked.
+
 ---
 
 ### Axis Y — Logical Dimension (Executable Program Structure)

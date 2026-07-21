@@ -96,8 +96,8 @@ def analyze_complexity():
     # Convert numeric types and group by file
     units_file_map = defaultdict(list)
     for u in inventory_list:
-        file = u.get("File", "").strip()
-        if not file:
+        rel = u.get("Relative_Path") or u.get("File", "").strip()
+        if not rel:
             continue
         try:
             u["Start_Line"] = int(u["Start_Line"])
@@ -105,21 +105,23 @@ def analyze_complexity():
         except (ValueError, KeyError):
             u["Start_Line"] = 0
             u["End_Line"] = 0
-        units_file_map[file].append(u)
+        units_file_map[rel].append(u)
 
     output_data = []
     audit_path_ = AUDIT_PATH
 
     sorted_files = sorted(units_file_map.keys(), key=str.lower)
 
-    for idx, file_name in enumerate(sorted_files):
-        debug_file = audit_path_ / f"{file_name}_DEBUG.csv"
+    for idx, rel_path in enumerate(sorted_files):
+        file_name = Path(rel_path).name
+        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+        debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
 
         if not debug_file.exists():
             print(f"  [{idx+1}] No DEBUG file: {file_name} — skipped")
             continue
 
-        units_per_file = units_file_map[file_name]
+        units_per_file = units_file_map[rel_path]
         units_per_file.sort(key=lambda u: u["Start_Line"])
 
         # Accumulators: each unit starts with base CC = 1

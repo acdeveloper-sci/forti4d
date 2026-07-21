@@ -125,20 +125,23 @@ def count_stmts_audit(inv_raw: dict) -> dict:
     if not AUDIT_PATH.exists():
         return {}
 
-    # Group units by file with their line ranges
-    map_by_file = defaultdict(list)
+    # Group units by Relative_Path (avoids basename collisions in subdirectories)
+    map_by_file = defaultdict(list)  # rel_path → [(start, end, unit_name)]
     for (file, name), row in inv_raw.items():
+        rel = row.get("Relative_Path") or file
         try:
             ls = int(row.get("Start_Line", 0))
             le = int(row.get("End_Line", 0))
         except (ValueError, TypeError):
             ls = le = 0
-        map_by_file[file].append((ls, le, name))
+        map_by_file[rel].append((ls, le, name))
 
     counts = {}  # (File, Unit) → {"N_Data_Stmts": n, "N_Entry_Stmts": n}
 
-    for file, units in map_by_file.items():
-        debug_file = AUDIT_PATH / f"{file}_DEBUG.csv"
+    for rel_path, units in map_by_file.items():
+        file_basename = Path(rel_path).name
+        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+        debug_file = AUDIT_PATH / f"{debug_stem}_DEBUG.csv"
         if not debug_file.exists():
             continue
 
@@ -158,7 +161,7 @@ def count_stmts_audit(inv_raw: dict) -> dict:
                     continue
                 _, _, name = max(candidates, key=lambda t: t[0])
 
-                k = (file, name)
+                k = (file_basename, name)
                 if k not in counts:
                     counts[k] = {"N_Data_Stmts": 0, "N_Entry_Stmts": 0}
                 if kind == "DATA_STMT":

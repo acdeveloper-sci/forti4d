@@ -189,6 +189,18 @@ def main():
     if args.output:
         env["FORT_OUT"] = str(Path(args.output))
 
+    # Validate source path (skip for --list)
+    if not args.list:
+        src_path = Path(env.get("FORT_SRC", "tests/fixtures/")).resolve()
+        if not src_path.exists():
+            print(f"\nERROR: Source directory not found: {src_path}")
+            print("  Set --project <DIR> or the FORT_SRC environment variable.")
+            sys.exit(1)
+        if not src_path.is_dir():
+            print(f"\nERROR: Source path is not a directory: {src_path}")
+            sys.exit(1)
+        env["FORT_SRC"] = str(src_path)
+
     # --list
     if args.list:
         fort_src = env.get("FORT_SRC", "tests/fixtures/")

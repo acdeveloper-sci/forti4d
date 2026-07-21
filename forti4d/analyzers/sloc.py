@@ -72,8 +72,8 @@ def analize_sloc():
     # Convert numeric types and group by file
     units_map = defaultdict(list)
     for u in inventory_list:
-        file = u.get("File", "").strip()
-        if not file:
+        rel = u.get("Relative_Path") or u.get("File", "").strip()
+        if not rel:
             continue
         try:
             u["Start_Line"] = int(u["Start_Line"])
@@ -81,14 +81,15 @@ def analize_sloc():
         except (ValueError, KeyError):
             u["Start_Line"] = 0
             u["End_Line"] = 0
-        units_map[file].append(u)
+        units_map[rel].append(u)
 
     code_path_ = CODE_PATH
     sorted_files = sorted(units_map.keys(), key=str.lower)
     output_data = []
 
-    for idx, file_name in enumerate(sorted_files):
-        physical_path = code_path_ / file_name
+    for idx, rel_path in enumerate(sorted_files):
+        file_name = Path(rel_path).name
+        physical_path = code_path_ / rel_path
         print(f"  [{idx+1}/{len(sorted_files)}] {file_name}")
 
         try:
@@ -104,7 +105,7 @@ def analize_sloc():
             continue
 
         # Sort units by Start_Line for scope resolution
-        units = sorted(units_map[file_name], key=lambda u: u["Start_Line"])
+        units = sorted(units_map[rel_path], key=lambda u: u["Start_Line"])
 
         # Accumulators per unit: { unit_name -> { cat -> count } }
         counters = defaultdict(lambda: defaultdict(int))
@@ -179,13 +180,12 @@ def analize_sloc():
     total_sloc_physycal = sum(r["SLOC_physical"] for r in output_data)
     total_sloc_net = sum(r["SLOC_net"] for r in output_data)
 
-    # Totals by file (root units only to avoid double-counting)
-    # Note: we sum all because most are non-overlapping (different ranges)
-    # For a real per-file total we use the max LOC per file
+    # Totals by file: each physical line is attributed to exactly one unit
+    # (innermost scope), so summing all unit LOCs per file gives the correct
+    # per-file total with no double-counting.
     files_loc = defaultdict(int)
     for r in output_data:
-        # Accumulate root LOC (Parent==GLOBAL) per file
-        files_loc[r["File"]] = max(files_loc[r["File"]], r["LOC"])
+        files_loc[r["File"]] += r["LOC"]
 
     print(f"\nGlobal summary:")
     print(f"  Total LOC (physical, corpus) : {sum(files_loc.values()):>8,}")

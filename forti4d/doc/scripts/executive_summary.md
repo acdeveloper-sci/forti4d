@@ -62,7 +62,7 @@ One row per source file.
 
 | Column | Description |
 | :--- | :--- |
-| `File` | Source file name |
+| `File` | Source file relative path (e.g. `subdir/file.f90`); equals the basename for flat single-directory projects |
 | `Total_Lines` | Total LOC (from root-level units only, to avoid double-counting) |
 | `Total_Units` | Number of units in the file |
 | `Has_Legacy` | `YES` / `NO` |
