@@ -2,7 +2,7 @@
 
 ## What is MI4D?
 
-MI4D (Modelo Integral 4D) is a conceptual framework for static auditing of
+MI4D (4-Dimensional Integral Model) is a conceptual framework for static auditing of
 Fortran source code. It proposes that a program is not a flat sequence of text,
 but a **topological hyper-object** that exists simultaneously in four orthogonal
 dimensions. A bug, a technical debt item, or a structural risk is defined as a

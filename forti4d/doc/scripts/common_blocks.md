@@ -10,48 +10,48 @@ data areas introduce.
 
 ## Configuration
 
-All paths are resolved under `RUTA_RESULTADOS`. See `config.py`.
+All paths are resolved under `RESULTS_PATH`. See `config.py`.
 
 | Constant | Default | Description |
 | :--- | :--- | :--- |
-| `RUTA_AUDIT` | `RUTA_RESULTADOS / "audit"` | Directory containing `*_DEBUG.csv` files |
-| `SALIDA_USO` | `RUTA_RESULTADOS / "common_uso.csv"` | Per-unit COMMON usage |
-| `SALIDA_ACOPLAMIENTO` | `RUTA_RESULTADOS / "common_acoplamiento.csv"` | Per-block coupling risk |
-| `NOMBRE_BLANK` | `"(BLANK)"` | Label for unnamed (blank) COMMON |
+| `AUDIT_PATH` | `RESULTS_PATH / "audit"` | Directory containing `*_DEBUG.csv` files |
+| `USAGE_OUTPUT` | `RESULTS_PATH / "common_usage.csv"` | Per-unit COMMON usage |
+| `COUPLING_OUTPUT` | `RESULTS_PATH / "common_coupling.csv"` | Per-block coupling risk |
+| `BLANK_NAME` | `"(BLANK)"` | Label for unnamed (blank) COMMON |
 
 ---
 
 ## Inputs
 
 - `<FORT_OUT>/audit/<filename>_DEBUG.csv` for each source file (reads `COMMON_STMT` lines)
-- `<FORT_OUT>/reporte_inventario.csv` (via `cargar_inventario()`)
+- `<FORT_OUT>/inventory_report.csv` (via `load_inventory()`)
 
 ---
 
 ## Outputs
 
-### `<FORT_OUT>/common_uso.csv`
+### `<FORT_OUT>/common_usage.csv`
 One row per (unit, COMMON block) pair.
 
 | Column | Description |
 | :--- | :--- |
-| `Archivo` | Source file name |
-| `Unidad` | Unit name |
-| `Tipo` | Unit type |
-| `Bloque` | COMMON block name, or `(BLANK)` for unnamed COMMON |
-| `Apariciones` | Number of COMMON statements referencing this block in this unit |
+| `File` | Source file name |
+| `Unit` | Unit name |
+| `Type` | Unit type |
+| `Block` | COMMON block name, or `(BLANK)` for unnamed COMMON |
+| `Occurrences` | Number of COMMON statements referencing this block in this unit |
 
-### `<FORT_OUT>/common_acoplamiento.csv`
-One row per COMMON block, sorted by `N_Unidades` descending.
+### `<FORT_OUT>/common_coupling.csv`
+One row per COMMON block, sorted by `N_Units` descending.
 
 | Column | Description |
 | :--- | :--- |
-| `Bloque` | COMMON block name |
-| `N_Unidades` | Number of distinct units that reference this block |
-| `N_Archivos` | Number of distinct source files involved |
-| `Riesgo` | Coupling risk level (see below) |
-| `Unidades` | Semicolon-separated list of unit names |
-| `Archivos` | Semicolon-separated list of file names |
+| `Block` | COMMON block name |
+| `N_Units` | Number of distinct units that reference this block |
+| `N_Files` | Number of distinct source files involved |
+| `Risk` | Coupling risk level (see below) |
+| `Units` | Semicolon-separated list of unit names |
+| `Files` | Semicolon-separated list of file names |
 
 ---
 
@@ -59,9 +59,9 @@ One row per COMMON block, sorted by `N_Unidades` descending.
 
 | Level | Condition |
 | :--- | :--- |
-| `BAJO` | 1 unit references the block |
-| `MEDIO` | 2–4 units reference the block |
-| `ALTO` | 5 or more units reference the block |
+| `LOW` | 1 unit references the block |
+| `MEDIUM` | 2–4 units reference the block |
+| `HIGH` | 5 or more units reference the block |
 
 ---
 
