@@ -107,6 +107,12 @@ def calculate_reachability(graph: dict, seeds: list) -> dict:
 # =============================================================================
 
 
+def _write_empty_csv():
+    columns = ["File", "Unit", "Type", "Parent", "Status", "Via_Entry_Points", "Reason"]
+    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        csv.DictWriter(f, fieldnames=columns).writeheader()
+
+
 def analyze_reachability():
     print("--- Reachability / Dead Code Analysis ---")
 
@@ -119,6 +125,7 @@ def analyze_reachability():
 
     if not inventory_list:
         print("Inventory is empty.")
+        _write_empty_csv()
         return
 
     # 2. Identify entry points
@@ -129,7 +136,8 @@ def analyze_reachability():
     ]
 
     if not eps_units:
-        print("No entry points found (PROGRAM / IMPLICIT-MAIN).")
+        print("No entry points found (PROGRAM / IMPLICIT-MAIN) — writing empty report.")
+        _write_empty_csv()
         return
 
     print(f"Entry points detected: {len(eps_units)}")
