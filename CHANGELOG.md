@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
+## [0.7.3] — 2026-07-31
+
+### Fixed
+- `reachability.py`: always write `report_reachability.csv` (headers only if
+  no entry points exist) — previously the file was omitted for pure library or
+  module-only corpora that contain no `PROGRAM` or `IMPLICIT-MAIN` units
+
+### Documentation
+- `doc/scripts/reachability.md`: note that the output file is always written
+  and that downstream consumers (`consolidate.py`, `cross_analysis.py`) handle
+  the empty-file case gracefully
+
+---
+
 ## [0.7.2] — 2026-07-31
 
 ### Fixed
