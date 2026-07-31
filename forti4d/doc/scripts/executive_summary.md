@@ -73,9 +73,14 @@ One row per source file.
 
 ## Notes
 
-- LOC is taken from the `Total_Lines` column of the inventory. Only
-  root-level units (`Parent = GLOBAL`) are summed per file to avoid
-  double-counting nested units.
+- LOC is taken from the `Total_Lines` column of the inventory
+  (`End_Line - Start_Line + 1`). Only root-level units (`Parent = GLOBAL`)
+  are summed per file to avoid double-counting nested units.
+- **LOC vs SLOC:** These figures will differ from `sloc.py`'s `LOC` column,
+  which counts physical lines by reading each source file directly and
+  classifying every line. Both measures are valid but answer different
+  questions: inventory LOC is a fast structural range estimate; SLOC is a
+  precise physical count. The discrepancy is expected and not an error.
 - The Legacy and I/O percentages in the Markdown report are computed as
   *units with at least one flag / total units*, not as raw flag counts.
 - **Scope-clean** units in section 5 are those with `IMPLICIT NONE`,
