@@ -16,13 +16,13 @@ All paths are resolved under `RESULTS_PATH`. See `config.py`.
 | Constant | Default | Description |
 | :--- | :--- | :--- |
 | `INVENTORY_FILE` | `RESULTS_PATH / "inventory_report.csv"` | Input: unit inventory |
-| `OUT_AMBIGUITIES` | `RESULTS_PATH / "dep_00_ambiguities.csv"` | Units with the same name in multiple files |
-| `OUT_MASTER` | `RESULTS_PATH / "dep_01_master_data.csv"` | All resolved call/use relationships |
-| `OUT_GRAPH` | `RESULTS_PATH / "dep_02_unit_graph.csv"` | Resolved call graph edges |
-| `OUT_IMPACT` | `RESULTS_PATH / "dep_03_impact_matrix.csv"` | Fan-In and Fan-Out per unit |
-| `OUT_ORPHANS` | `RESULTS_PATH / "dep_04_external_orphans.csv"` | References with no known definition |
-| `OUT_FILES` | `RESULTS_PATH / "dep_05_file_dependencies.csv"` | File-level dependency summary |
-| `OUT_INCLUDES` | `RESULTS_PATH / "dep_06_include_files.csv"` | Explicit INCLUDE file references |
+| `AMBIGUITIES_OUT` | `RESULTS_PATH / "dep_00_ambiguities.csv"` | Units with the same name in multiple files |
+| `MASTER_OUT` | `RESULTS_PATH / "dep_01_master_data.csv"` | All resolved call/use relationships |
+| `GRAPH_OUT` | `RESULTS_PATH / "dep_02_unit_graph.csv"` | Resolved call graph edges |
+| `IMPACT_OUT` | `RESULTS_PATH / "dep_03_impact_matrix.csv"` | Fan-In and Fan-Out per unit |
+| `ORPHANS_OUT` | `RESULTS_PATH / "dep_04_external_orphans.csv"` | References with no known definition |
+| `DEPENDS_OUT` | `RESULTS_PATH / "dep_05_file_dependencies.csv"` | File-level dependency summary |
+| `INCLUDES_OUT` | `RESULTS_PATH / "dep_06_include_files.csv"` | Explicit INCLUDE file references |
 
 ---
 
@@ -48,10 +48,13 @@ Units with the same name defined in more than one source file. Always written
 | `File_List` | Semicolon-separated list of those files |
 
 ### `dep_01_master_data.csv`
-All detected call/use relationships before resolution.
+All detected call/use relationships before resolution. Always written (headers
+only when no dependencies are found).
 
 ### `dep_02_unit_graph.csv`
-Resolved call graph. One row per directed edge.
+Resolved call graph. One row per directed edge. Always written (headers only
+when no resolved edges exist — e.g. a pure library corpus with no cross-file
+dependencies).
 
 | Column | Description |
 | :--- | :--- |
@@ -64,7 +67,8 @@ Resolved call graph. One row per directed edge.
 | `Weight` | Number of times this dependency appears in the calling unit |
 
 ### `dep_03_impact_matrix.csv`
-Fan-In and Fan-Out per unit.
+Fan-In and Fan-Out per unit. Always written (headers only when no resolved
+dependencies exist).
 
 | Column | Description |
 | :--- | :--- |
@@ -76,13 +80,16 @@ Fan-In and Fan-Out per unit.
 
 ### `dep_04_external_orphans.csv`
 References found in source code with no matching definition in the corpus
-(external library calls, unresolved symbols).
+(external library calls, unresolved symbols). Always written (headers only when
+all references are resolved internally).
 
 ### `dep_05_file_dependencies.csv`
-Aggregated dependency summary at file level.
+Aggregated dependency summary at file level. Always written (headers only when
+all units reside in a single file or have no cross-file dependencies).
 
 ### `dep_06_include_files.csv`
 Explicit INCLUDE file references — one row per unique `(Source_File, Source_Unit, Included_File)` triple.
+Always written (headers only when no INCLUDE directives are found).
 
 | Column | Description |
 | :--- | :--- |
