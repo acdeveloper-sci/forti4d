@@ -109,9 +109,10 @@ def main():
             "end": int(row["End_Line"]),
         }
 
-    # Load ambiguedades
+    # Load ambiguities — absence means no duplicate names in the corpus (not an error)
     if not AMBIGUITIES_PATH.exists():
-        print(f"ERROR: {AMBIGUITIES_PATH} not found. Run dependencies.py first.")
+        print("No ambiguous unit names found — skipping clone comparison.")
+        _write_empty_csv()
         return
 
     groups = []  # [(name, utype, [file1, file2, ...])]
@@ -125,7 +126,7 @@ def main():
 
     if not groups:
         print("No duplicate units found.")
-        _wrtite_empty_csv()
+        _write_empty_csv()
         return
 
     # Build file path index
@@ -189,7 +190,7 @@ def main():
     print(f"\nGenerated: {CSV_OUTPUT}")
 
 
-def _wrtite_empty_csv():
+def _write_empty_csv():
     columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
     with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
         csv.DictWriter(f, fieldnames=columns).writeheader()

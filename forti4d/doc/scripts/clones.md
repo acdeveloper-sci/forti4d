@@ -82,7 +82,9 @@ additions, and case conventions while preserving structural differences.
 ## Notes
 
 - Requires `dependencies.py` and `inventory.py` to have been run first.
-- If `dep_00_ambiguities.csv` is empty (no duplicate names in the corpus),
-  `report_clones.csv` is written with headers only.
+- If `dep_00_ambiguities.csv` is absent or empty (no duplicate unit names in
+  the corpus), `report_clones.csv` is written with headers only — this is a
+  valid outcome, not an error.
 - `report_clones.csv` is consumed by `prioritization.py` to compute the clone
-  penalty component of the risk score.
+  penalty component of the risk score. If the file is absent or empty,
+  `prioritization.py` assigns zero clone penalty to all units.

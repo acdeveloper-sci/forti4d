@@ -308,13 +308,16 @@ def load_inventory_enhanced(report_ambiguities=False) -> Tuple[Dict, Dict]:
                 }
             )
 
-    # Save ambiguity report
-    if ambiguous_rows and report_ambiguities:
+    # Save ambiguity report — always written when called from the pipeline
+    if report_ambiguities:
         with open(AMBIGUITIES_OUT, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=["Unit_Name", "Type", "Count", "File_List"])
             w.writeheader()
             w.writerows(ambiguous_rows)
-        print(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {AMBIGUITIES_OUT})")
+        if ambiguous_rows:
+            print(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {AMBIGUITIES_OUT})")
+        else:
+            print(f"  -> No ambiguous unit names found (see {AMBIGUITIES_OUT})")
 
     # Return 'inventory' as-is (list of candidates) so resolution can decide
     return inventory, file_map

@@ -6,6 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
+## [0.7.2] — 2026-07-31
+
+### Fixed
+- `dependencies.py`: always write `dep_00_ambiguities.csv` (headers only if no
+  duplicates found) — previously the file was omitted when the corpus had no
+  units with the same name in multiple files, causing `clones.py` to treat a
+  valid zero-ambiguity run as a missing-file error
+- `clones.py`: treat absent `dep_00_ambiguities.csv` as zero ambiguities instead
+  of aborting with an ERROR message; create `report_clones.csv` empty in that
+  case; fix typo `_wrtite_empty_csv` → `_write_empty_csv`
+
+### Documentation
+- `doc/scripts/dependencies.md`: note that `dep_00_ambiguities.csv` is always
+  written, even when empty
+- `doc/scripts/clones.md`: clarify that absent or empty `dep_00_ambiguities.csv`
+  is a valid outcome; note that `prioritization.py` handles the empty case
+
+---
+
 ## [0.7.1] — 2026-07-21
 
 ### Fixed
