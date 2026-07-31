@@ -658,146 +658,132 @@ def main():
     # 4. CSV File Generation
 
     # A. Master
+    keys_master = [
+        "Source_File",
+        "Source_Unit",
+        "Source_Type",
+        "Dep_Type",
+        "Target_Unit",
+        "Target_Type",
+        "Target_File",
+        "Source_Line",
+    ]
+    with open(MASTER_OUT, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=keys_master)
+        w.writeheader()
+        w.writerows(master_rows)
     if master_rows:
-        keys = [
-            "Source_File",
-            "Source_Unit",
-            "Source_Type",
-            "Dep_Type",
-            "Target_Unit",
-            "Target_Type",
-            "Target_File",
-            "Source_Line",
-        ]
-        with open(MASTER_OUT, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=keys)
-            w.writeheader()
-            w.writerows(master_rows)
         print(f"Generated:{MASTER_OUT}")
 
     # B. Units Graph
+    with open(GRAPH_OUT, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(
+            [
+                "Source_Unit",
+                "Source_Type",
+                "Target_Unit",
+                "Target_Type",
+                "Dep_Type",
+                "Target_File",
+                "Weight",
+            ]
+        )
+        for row in sorted(list(graph_edges)):
+            key = (row[0], row[2], row[1], row[3])
+            weight = edges_counter[key]
+            w.writerow(row + (weight,))
     if graph_edges:
-        with open(GRAPH_OUT, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(
-                [
-                    "Source_Unit",
-                    "Source_Type",
-                    "Target_Unit",
-                    "Target_Type",
-                    "Dep_Type",
-                    "Target_File",
-                    "Weight",
-                ]
-            )
-            for row in sorted(list(graph_edges)):
-                # (source_unit, dest_unit, source_type, dest_type)
-                key = (row[0], row[2], row[1], row[3])
-                weight = edges_counter[key]
-                rowt = row + (weight,)
-                w.writerow(rowt)
         print(f"Generated:{GRAPH_OUT}")
 
     # C. Impact Matrix
     all_units = set(impact_fan_out.keys()) | set(impact_fan_in.keys())
-    if all_units:
-        # Recover types for the matrix (looking up in inventory or inferred)
-        rows_impact = []
-        for u in sorted(all_units):
-            # Type? Look up in inventory. If not found, it may be an Implicit Main
-            utype = "UNKNOWN"
-            file = "N/A"
-
-            if u.startswith("MAIN__"):
-                report_type = "IMPLICIT-MAIN"
-                # Optional: try to recover the filename from the MAIN__ string
-                files_report = u.replace("MAIN__", "")
-            else:
-                candidates = inventory.get(u)  # Esto devuelve una LISTA o None
-                if candidates:
-                    detected_types = sorted(list(set(d["type"] for d in candidates)))
-                    report_type = "/".join(detected_types)
-
-                    files_list = [d["file"] for d in candidates]
-                    files_report = "; ".join(sorted(set(files_list)))
-
-            rows_impact.append(
-                {
-                    "Unit": u,
-                    "Type": report_type,
-                    "File": files_report,
-                    "Fan_Out": impact_fan_out.get(u, 0),
-                    "Fan_In": impact_fan_in.get(u, 0),
-                }
-            )
-
-        with open(IMPACT_OUT, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Unit", "Type", "File", "Fan_Out", "Fan_In"])
-            w.writeheader()
-            w.writerows(rows_impact)
+    rows_impact = []
+    for u in sorted(all_units):
+        if u.startswith("MAIN__"):
+            report_type = "IMPLICIT-MAIN"
+            files_report = u.replace("MAIN__", "")
+        else:
+            candidates = inventory.get(u)
+            if candidates:
+                detected_types = sorted(list(set(d["type"] for d in candidates)))
+                report_type = "/".join(detected_types)
+                files_report = "; ".join(sorted(set(d["file"] for d in candidates)))
+        rows_impact.append(
+            {
+                "Unit": u,
+                "Type": report_type,
+                "File": files_report,
+                "Fan_Out": impact_fan_out.get(u, 0),
+                "Fan_In": impact_fan_in.get(u, 0),
+            }
+        )
+    with open(IMPACT_OUT, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["Unit", "Type", "File", "Fan_Out", "Fan_In"])
+        w.writeheader()
+        w.writerows(rows_impact)
+    if rows_impact:
         print(f"Generated:{IMPACT_OUT}")
 
     # D. Orphans
+    with open(ORPHANS_OUT, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Target_Unit", "Dep_Type", "Status"])
+        for u, t in sorted(list(orphans_set)):
+            w.writerow([u, t, "EXTERNAL_OR_LIBRARY"])
     if orphans_set:
-        with open(ORPHANS_OUT, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["Target_Unit", "Dep_Type", "Status"])
-            for u, t in sorted(list(orphans_set)):
-                w.writerow([u, t, "EXTERNAL_OR_LIBRARY"])
         print(f"Generated:{ORPHANS_OUT}")
 
     # E. File Dependencies
-    if file_deps_map:
-        file_rows = []
-        for (src, dst), natures in file_deps_map.items():
-            strongest = get_strongest_nature(natures)
-            details = "; ".join(sorted(file_deps_details[(src, dst)]))
-            all_nats = "; ".join(sorted(natures))
-
-            file_rows.append(
-                {
-                    "Source_File": src,
-                    "Target_File": dst,
-                    "Strong_Nature": strongest,
-                    "Nature_List": all_nats,
-                    "Detail_Types": details,
-                }
-            )
-
-        with open(DEPENDS_OUT, "w", newline="", encoding="utf-8") as f:
-            keys = ["Source_File", "Target_File", "Strong_Nature", "Nature_List", "Detail_Types"]
-            w = csv.DictWriter(f, fieldnames=keys)
-            w.writeheader()
-            w.writerows(file_rows)
+    file_rows = []
+    for (src, dst), natures in file_deps_map.items():
+        strongest = get_strongest_nature(natures)
+        details = "; ".join(sorted(file_deps_details[(src, dst)]))
+        all_nats = "; ".join(sorted(natures))
+        file_rows.append(
+            {
+                "Source_File": src,
+                "Target_File": dst,
+                "Strong_Nature": strongest,
+                "Nature_List": all_nats,
+                "Detail_Types": details,
+            }
+        )
+    with open(DEPENDS_OUT, "w", newline="", encoding="utf-8") as f:
+        keys = ["Source_File", "Target_File", "Strong_Nature", "Nature_List", "Detail_Types"]
+        w = csv.DictWriter(f, fieldnames=keys)
+        w.writeheader()
+        w.writerows(file_rows)
+    if file_rows:
         print(f"Generated:{DEPENDS_OUT}")
 
-        # dep_06: INCLUDE file references — one row per INCLUDE statement
-        include_rows = []
-        seen_includes = set()
-        for item in all_raw_deps:
-            if item.get("dep_type") != "INCLUDE":
-                continue
-            target = item["target_raw"]
-            key = (item["source_file"], item["source_unit"], target)
-            if key in seen_includes:
-                continue
-            seen_includes.add(key)
-            estado = "PRESENT" if (CODE_PATH / target).exists() else "MISSING"
-            include_rows.append(
-                {
-                    "Source_File": item["source_file"],
-                    "Source_Unit": item["source_unit"],
-                    "Included_File": target,
-                    "Status": estado,
-                }
-            )
-        include_rows.sort(key=lambda r: (r["Source_File"], r["Source_Unit"]))
-
-        with open(INCLUDES_OUT, "w", newline="", encoding="utf-8") as f:
-            keys = ["Source_File", "Source_Unit", "Included_File", "Status"]
-            w = csv.DictWriter(f, fieldnames=keys)
-            w.writeheader()
-            w.writerows(include_rows)
+    # F. INCLUDE file references — one row per INCLUDE statement
+    include_rows = []
+    seen_includes = set()
+    for item in all_raw_deps:
+        if item.get("dep_type") != "INCLUDE":
+            continue
+        target = item["target_raw"]
+        key = (item["source_file"], item["source_unit"], target)
+        if key in seen_includes:
+            continue
+        seen_includes.add(key)
+        estado = "PRESENT" if (CODE_PATH / target).exists() else "MISSING"
+        include_rows.append(
+            {
+                "Source_File": item["source_file"],
+                "Source_Unit": item["source_unit"],
+                "Included_File": target,
+                "Status": estado,
+            }
+        )
+    include_rows.sort(key=lambda r: (r["Source_File"], r["Source_Unit"]))
+    with open(INCLUDES_OUT, "w", newline="", encoding="utf-8") as f:
+        keys = ["Source_File", "Source_Unit", "Included_File", "Status"]
+        w = csv.DictWriter(f, fieldnames=keys)
+        w.writeheader()
+        w.writerows(include_rows)
+    if include_rows:
         print(f"Generated: {INCLUDES_OUT} ({len(include_rows)} INCLUDE references)")
 
 

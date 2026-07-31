@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
+## [0.7.4] — 2026-07-31
+
+### Fixed
+- `dependencies.py`: always write all six `dep_*` output files (`dep_01` through
+  `dep_06`) even when the corpus has no cross-file dependencies — previously the
+  files were omitted for pure library/module corpora, causing downstream failures
+  in `structure_analysis`, `reachability`, and `clones`; also moves
+  `dep_06_include_files.csv` out of the incorrectly nested `file_deps_map` block
+
+### Documentation
+- `doc/scripts/dependencies.md`: correct constant names in Configuration table
+  (`OUT_*` → `*_OUT`); add "Always written" note to all seven `dep_*` outputs
+
+### Tests
+- `tests/fixtures_lib_only/` + `tests/test_empty_outputs.py`: mini-corpus of two
+  module-only `.f90` files and three tests verifying that `dep_00_ambiguities.csv`,
+  `report_clones.csv`, and `report_reachability.csv` are written empty (headers
+  only) for a pure-library corpus — exercises the code paths fixed in v0.7.2,
+  v0.7.3, and v0.7.4
+
+---
+
 ## [0.7.3] — 2026-07-31
 
 ### Fixed

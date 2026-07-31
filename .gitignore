@@ -3,6 +3,7 @@ results/
 
 # Test outputs
 tests/results/
+tests/results_lib_only/
 
 # Python
 __pycache__/
