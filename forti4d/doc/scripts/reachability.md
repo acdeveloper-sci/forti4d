@@ -75,5 +75,8 @@ so the output always shows the human-readable name.
 - A corpus with multiple executables (several PROGRAM / IMPLICIT-MAIN files
   in the same directory) will have multiple independent BFS roots. A unit
   is `REACHABLE` if reachable from *any* of them.
+- `report_reachability.csv` is always written, even when the corpus has no
+  entry points (pure library or module-only corpus) — in that case the file
+  contains headers only. This is a valid outcome, not an error.
 - `report_reachability.csv` is consumed by `consolidate.py` and
-  `visual_graph.py`.
+  `cross_analysis.py`; both handle the empty-file case gracefully.
