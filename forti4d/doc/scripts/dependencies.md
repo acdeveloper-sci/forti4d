@@ -36,7 +36,9 @@ All paths are resolved under `RESULTS_PATH`. See `config.py`.
 ## Outputs
 
 ### `dep_00_ambiguities.csv`
-Units with the same name defined in more than one source file.
+Units with the same name defined in more than one source file. Always written
+(headers only if no ambiguities exist) so downstream steps can distinguish
+"dependencies ran, no duplicates found" from "dependencies never ran".
 
 | Column | Description |
 | :--- | :--- |
