@@ -6,7 +6,7 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
-## [Unreleased]
+## [0.8.0] — 2026-08-01
 
 ### Added
 - **In-process library API** (Bloque 1): `import forti4d; forti4d.run_pipeline(...)`
@@ -44,6 +44,27 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
   depends on either signature yet.
 
 ### Fixed
+- `clones.py::build_file_index`: indexed Fortran source files by basename
+  (`f.name`) instead of relative path — silently dropped all but one file
+  when multiple files share the same name in different subdirectories (e.g.,
+  `main.F` in 19 subdirs of FVCOM); changed to `f.relative_to(path)`.
+- `dependencies.py::load_inventory_enhanced`: used `File` (basename) as the
+  identifier key for inventory entries, causing `dep_00_ambiguities.csv` and
+  `dep_01_master_data.csv` to list only the basename when different files in
+  subdirectories share the same name — changed to `Relative_Path`, with
+  fallback to `File` for backward compatibility with older inventory files.
+- `clones.py`: pairwise comparison called `read_logical_lines()` once per
+  file pair, re-parsing the same source file multiple times when it appeared
+  in several ambiguity groups — added a per-run parse cache (`_parse_cache`)
+  so each file is parsed at most once per pipeline run.
+- `inventory.py::write_inventory`: skipped creating `inventory_report.csv`
+  entirely when the source directory contained no Fortran units (`if rows:`
+  guard) — violated the pipeline invariant; now always writes the file, with
+  headers only when the inventory is empty.
+- `clones.py::analyze_clones`: returned `None` for `report_clones` when the
+  inventory was empty, causing `write_clones` to skip writing the output file
+  — violated the pipeline invariant; now returns an empty list so
+  `write_clones` always writes `report_clones.csv` (headers only).
 - `cross_analysis.py::to_float()`: crashed on native `int`/`float` values for
   `Fan_In`/`Fan_Out` when fed in-memory (non-CSV-string) data from the new
   library API — added an `isinstance(val, str)` guard before `.strip()`.
