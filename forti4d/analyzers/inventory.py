@@ -384,14 +384,19 @@ def audit_file(file_path: Path, source_path: Path) -> List[Dict]:
     return rows
 
 
-def analyze_inventory(source_dir: Path) -> list:
+def analyze_inventory(source_dir: Path, *, workers: int = 1) -> list:
     """Pure computation: scan source_dir, return the inventory rows. No disk writes."""
+    from forti4d.lib import parallel
+
     files = sorted([f for f in source_dir.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
     print(f"--- Inventory V4 (Fortran Hierarchy) ---")
 
+    # audit_file is passed unwrapped (no try/except) — if a file raises, the
+    # whole step fails, same in sequential and parallel mode (see
+    # pipeline.run_step's own try/except, which is where this is caught).
     data = []
-    for file in files:
-        data.extend(audit_file(file, source_dir))
+    for rows in parallel.pmap(audit_file, [(f, source_dir) for f in files], workers):
+        data.extend(rows)
     return data
 
 
@@ -420,14 +425,15 @@ def write_inventory(results_dir: Path, rows: list) -> None:
         print(f"Report generated: {output_file}")
 
 
-def main(source_dir=None, results_dir=None, *, inputs=None):
+def main(source_dir=None, results_dir=None, *, inputs=None, workers=None):
     """Entry point for both CLI standalone use and the in-process orchestrator."""
     source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    workers = config.resolve_workers(workers)
     if not source_dir.exists():
         print(f"Error: '{source_dir}' does not exist")
         return {"inventory_report": []}
 
-    data = analyze_inventory(source_dir)
+    data = analyze_inventory(source_dir, workers=workers)
     write_inventory(results_dir, data)
     return {"inventory_report": data}
 

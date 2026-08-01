@@ -36,3 +36,21 @@ def resolve_paths(source=None, results=None):
     src = Path(source) if source is not None else Path(os.environ.get("FORT_SRC", "tests/fixtures/"))
     out = Path(results) if results is not None else Path(os.environ.get("FORT_OUT", "results/"))
     return src, out
+
+
+def resolve_workers(workers=None) -> int:
+    """
+    Resolve the number of worker processes for steps that support
+    parallelism. Priority: explicit argument > FORT_WORKERS env var >
+    default (1 = sequential, preserves current behavior unless someone
+    opts in).
+    """
+    if workers is not None:
+        return max(1, int(workers))
+    env_val = os.environ.get("FORT_WORKERS")
+    if env_val is not None:
+        try:
+            return max(1, int(env_val))
+        except ValueError:
+            return 1
+    return 1

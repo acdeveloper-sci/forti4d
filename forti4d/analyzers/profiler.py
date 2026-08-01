@@ -245,7 +245,17 @@ def _compute_file_density(rel_path, units_on_file, source_dir):
     return debug_rows, summary_rows
 
 
-def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None) -> dict:
+def _safe_compute_file_density(rel_path, units_on_file, source_dir):
+    """Never raises — wraps _compute_file_density so error handling is
+    identical whether pmap runs sequentially or via a process pool.
+    Returns (True, (debug_rows, summary_rows)) or (False, error_str)."""
+    try:
+        return True, _compute_file_density(rel_path, units_on_file, source_dir)
+    except Exception as e:
+        return False, str(e)
+
+
+def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None, workers: int = 1) -> dict:
     print("STARTING DENSITY PROFILING (V3 Audited)")
     inputs = inputs or {}
 
@@ -284,17 +294,19 @@ def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None) -> dict
     # Sort files alphabetically for the report
     sorted_files = sorted(map_units_file.keys(), key=lambda x: x.lower())
 
-    for idx, rel_path in enumerate(sorted_files):
+    from forti4d.lib import parallel
+
+    arg_tuples = [(rel_path, map_units_file[rel_path], source_dir) for rel_path in sorted_files]
+    per_file_results = parallel.pmap(_safe_compute_file_density, arg_tuples, workers)
+
+    for idx, (rel_path, (ok, payload)) in enumerate(zip(sorted_files, per_file_results)):
         file_name = Path(rel_path).name
         print(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
 
-        units_on_file = map_units_file[rel_path]
-
-        try:
-            debug_rows, summary_rows = _compute_file_density(rel_path, units_on_file, source_dir)
-        except Exception as e:
-            print(f"  -> Read error/File not found: {e}")
+        if not ok:
+            print(f"  -> Read error/File not found: {payload}")
             continue
+        debug_rows, summary_rows = payload
 
         # AUDIT — written immediately per file, not deferred: if the run is
         # interrupted midway, files already processed stay on disk.
@@ -351,10 +363,11 @@ def write_density(results_dir: Path, data: dict) -> None:
         print(f"Error writing CSV: {e}")
 
 
-def main(source_dir=None, results_dir=None, *, inputs=None):
+def main(source_dir=None, results_dir=None, *, inputs=None, workers=None):
     """Entry point for both CLI standalone use and the in-process orchestrator."""
     source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
-    data = analyze_density(source_dir, results_dir, inputs=inputs)
+    workers = config.resolve_workers(workers)
+    data = analyze_density(source_dir, results_dir, inputs=inputs, workers=workers)
     write_density(results_dir, data)
     return data
 

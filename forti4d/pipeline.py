@@ -11,6 +11,7 @@ Usage:
   python pipeline.py --skip visual_graph                  # skip specific steps
   python pipeline.py --continue-on-error                  # don't stop on first failure
   python pipeline.py --quiet                              # only show step names and results
+  python pipeline.py --workers 4                          # parallelize inventory/profiler/blocks
 
 Library usage:
   import forti4d
@@ -73,6 +74,7 @@ class RunContext:
     source_dir: Path
     results_dir: Path
     data: dict = field(default_factory=dict)
+    workers: int = 1
 
 
 @dataclass
@@ -88,17 +90,49 @@ class PipelineResult:
 # =============================================================================
 
 
-def _default_step_runner(module_path: str):
+# Steps whose main() accepts a `workers` kwarg for per-file parallelism.
+# Deliberately narrow (Bloque 2 scope) — the other 16 steps' main() are
+# untouched and must never receive this kwarg.
+_WORKERS_AWARE_STEPS = {"inventory", "profiler"}
+
+
+def _default_step_runner(module_path: str, name: str):
     def _run(ctx: RunContext) -> dict:
         mod = importlib.import_module(module_path)
-        return mod.main(ctx.source_dir, ctx.results_dir, inputs=ctx.data)
+        kwargs = {"inputs": ctx.data}
+        if name in _WORKERS_AWARE_STEPS:
+            kwargs["workers"] = ctx.workers
+        return mod.main(ctx.source_dir, ctx.results_dir, **kwargs)
 
     return _run
 
 
+def _process_one_blocks_file(debug_file_str: str, results_dir_str: str) -> tuple:
+    """
+    Computes and writes one blocks/<name>_blocks.txt file. Self-contained
+    (unlike profiler's per-file worker) because _run_blocks_step exposes
+    nothing in ctx.data — no point sending the report text back over IPC
+    just for the parent to write it. Never raises; returns
+    (debug_file_name, error_or_None) so the caller can aggregate failures
+    the same way in sequential and parallel mode.
+    """
+    from forti4d.analyzers import block_analysis
+
+    debug_file = Path(debug_file_str)
+    name = debug_file.name.replace("_DEBUG.csv", "")
+    output = Path(results_dir_str) / "blocks" / f"{name}_blocks.txt"
+    try:
+        report = block_analysis.analyze_blocks_file(str(debug_file), results_dir=Path(results_dir_str))
+        if report is not None:
+            output.write_text(report, encoding="utf-8")
+        return debug_file.name, None
+    except Exception as exc:
+        return debug_file.name, str(exc)[:80]
+
+
 def _run_blocks_step(ctx: RunContext) -> dict:
     """In-process equivalent of the old subprocess-per-file block generation."""
-    from forti4d.analyzers import block_analysis
+    from forti4d.lib import parallel
 
     audit_path = ctx.results_dir / "audit"
     blocks_dir = ctx.results_dir / "blocks"
@@ -112,16 +146,11 @@ def _run_blocks_step(ctx: RunContext) -> dict:
 
     blocks_dir.mkdir(parents=True, exist_ok=True)
 
+    arg_tuples = [(str(f), str(ctx.results_dir)) for f in debug_files]
     errors = []
-    for debug_file in debug_files:
-        name = debug_file.name.replace("_DEBUG.csv", "")
-        output = blocks_dir / f"{name}_blocks.txt"
-        try:
-            report = block_analysis.analyze_blocks_file(str(debug_file), results_dir=ctx.results_dir)
-            if report is not None:
-                output.write_text(report, encoding="utf-8")
-        except Exception as exc:
-            errors.append(f"{debug_file.name}: {str(exc)[:80]}")
+    for debug_name, err in parallel.pmap(_process_one_blocks_file, arg_tuples, ctx.workers):
+        if err:
+            errors.append(f"{debug_name}: {err}")
 
     if errors:
         raise RuntimeError("; ".join(errors))
@@ -160,7 +189,7 @@ def run_step(name: str, module_path, ctx: RunContext, *, capture_output: bool = 
     in-process it must be caught here instead of unwinding the orchestrator.
     """
     t0 = time.time()
-    runner = _SPECIAL_RUNNERS.get(name) or _default_step_runner(module_path)
+    runner = _SPECIAL_RUNNERS.get(name) or _default_step_runner(module_path, name)
     buf = io.StringIO() if capture_output else None
 
     try:
@@ -202,6 +231,7 @@ def run_pipeline(
     skip=None,
     continue_on_error=False,
     quiet=False,
+    workers=None,
     on_step_start=None,
     on_step_end=None,
 ) -> PipelineResult:
@@ -214,8 +244,14 @@ def run_pipeline(
     `output`) instead of letting it print live — same idea as the CLI's
     --quiet flag, useful for library callers that want to suppress the
     analyzers' own print() noise until Bloque 3 replaces it with logging.
+    `workers` controls per-file parallelism for the steps that support it
+    (currently inventory and profiler; resolved via
+    config.resolve_workers() — explicit argument > FORT_WORKERS env var >
+    1/sequential).
     """
-    ctx = RunContext(source_dir=Path(source_dir), results_dir=Path(results_dir))
+    ctx = RunContext(
+        source_dir=Path(source_dir), results_dir=Path(results_dir), workers=config.resolve_workers(workers)
+    )
     ctx.results_dir.mkdir(parents=True, exist_ok=True)
 
     steps_to_run = _filter_steps(from_step, only, skip)
@@ -295,6 +331,12 @@ def main():
     parser.add_argument("--continue-on-error", action="store_true", help="Continue to next step even if a step fails.")
     parser.add_argument(
         "--quiet", action="store_true", help="Suppress script output — show only step names and results."
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        metavar="N",
+        help="Parallel workers for steps that support per-file parallelism (inventory, profiler, blocks). Default: 1 (sequential). Also settable via FORT_WORKERS.",
     )
     args = parser.parse_args()
 
@@ -378,6 +420,7 @@ def main():
         skip=args.skip,
         continue_on_error=args.continue_on_error,
         quiet=args.quiet,
+        workers=args.workers,
         on_step_start=on_step_start,
         on_step_end=on_step_end,
     )
