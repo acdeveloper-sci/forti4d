@@ -20,6 +20,8 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d import config
 
 # =============================================================================
@@ -102,7 +104,7 @@ def load_consolidated(rows=None, results_dir=None) -> list:
         return rows
     consol_path = Path(results_dir) / "report_consolidated.csv"
     if not consol_path.exists():
-        print(f"ERROR: {consol_path} not found. Run consolidate.py first.")
+        logger.warning(f"ERROR: {consol_path} not found. Run consolidate.py first.")
         return []
     with open(consol_path, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
@@ -297,16 +299,16 @@ def write_prioritization(results_dir, data: dict) -> None:
     for r in result:
         count[r["Priority"]] += 1
 
-    print(f"\n{len(result)} units prioritized")
-    print(f"  CRITICAL  : {count['CRITICAL']}")
-    print(f"  HIGH      : {count['HIGH']}")
-    print(f"  MEDIUM    : {count['MEDIUM']}")
-    print(f"  LOW       : {count['LOW']}")
-    print(f"  DEAD_CODE : {count['DEAD_CODE']}")
-    print(f"\nTop 10:")
+    logger.info(f"{len(result)} units prioritized")
+    logger.info(f"  CRITICAL  : {count['CRITICAL']}")
+    logger.info(f"  HIGH      : {count['HIGH']}")
+    logger.info(f"  MEDIUM    : {count['MEDIUM']}")
+    logger.info(f"  LOW       : {count['LOW']}")
+    logger.info(f"  DEAD_CODE : {count['DEAD_CODE']}")
+    logger.info("Top 10:")
     for r in result[:10]:
-        print(f"  [{r['Priority']:<9}] {r['Score']:>5}  {r['Unit']:<25} CC={r['CC']}  FanIn={r['Fan_In']}")
-    print(f"\nGenerated: {output_file}")
+        logger.info(f"  [{r['Priority']:<9}] {r['Score']:>5}  {r['Unit']:<25} CC={r['CC']}  FanIn={r['Fan_In']}")
+    logger.success(f"Generated: {output_file}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

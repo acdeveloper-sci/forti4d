@@ -10,8 +10,10 @@ Usage:
   python pipeline.py --only sloc consolidate              # run only these steps
   python pipeline.py --skip visual_graph                  # skip specific steps
   python pipeline.py --continue-on-error                  # don't stop on first failure
-  python pipeline.py --quiet                              # only show step names and results
+  python pipeline.py --quiet                              # console shows WARNING+ only
   python pipeline.py --workers 4                          # parallelize inventory/profiler/blocks
+  python pipeline.py --log-file /tmp/run.log               # override the log file location
+  python pipeline.py --no-log-file                         # disable the log file entirely
 
 Library usage:
   import forti4d
@@ -21,15 +23,16 @@ Library usage:
 
 import argparse
 import importlib
-import io
 import os
 import sys
 import time
-from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d import config
+from forti4d.lib.logging_setup import configure_logging
 
 # =============================================================================
 # PIPELINE DEFINITION
@@ -177,10 +180,9 @@ _SPECIAL_RUNNERS = {
 }
 
 
-def run_step(name: str, module_path, ctx: RunContext, *, capture_output: bool = False) -> tuple:
+def run_step(name: str, module_path, ctx: RunContext) -> tuple:
     """
-    Executes one step in-process. Returns (success, elapsed, error_repr, output).
-    `output` is the captured stdout text if capture_output=True, else "".
+    Executes one step in-process. Returns (success, elapsed, error_repr).
 
     The try/except here replaces the fault isolation that subprocess used to
     provide — it's what makes --continue-on-error work without separate
@@ -190,19 +192,15 @@ def run_step(name: str, module_path, ctx: RunContext, *, capture_output: bool = 
     """
     t0 = time.time()
     runner = _SPECIAL_RUNNERS.get(name) or _default_step_runner(module_path, name)
-    buf = io.StringIO() if capture_output else None
 
     try:
-        if capture_output:
-            with redirect_stdout(buf):
-                result = runner(ctx)
-        else:
-            result = runner(ctx)
+        result = runner(ctx)
         if result:
             ctx.data.update(result)
-        return True, time.time() - t0, "", (buf.getvalue() if buf else "")
+        return True, time.time() - t0, ""
     except (Exception, SystemExit) as exc:
-        return False, time.time() - t0, f"{type(exc).__name__}: {exc}", (buf.getvalue() if buf else "")
+        logger.exception(f"Step '{name}' failed")
+        return False, time.time() - t0, f"{type(exc).__name__}: {exc}"
 
 
 # =============================================================================
@@ -230,20 +228,18 @@ def run_pipeline(
     only=None,
     skip=None,
     continue_on_error=False,
-    quiet=False,
     workers=None,
     on_step_start=None,
     on_step_end=None,
 ) -> PipelineResult:
     """
-    Runs the pipeline in-process — no subprocess, no print() calls of its
-    own. Progress is only reported via the optional callbacks:
+    Runs the pipeline in-process — no subprocess. Progress is only reported
+    via the optional callbacks:
       on_step_start(name, description)
-      on_step_end(name, success, elapsed, error, output)
-    `quiet=True` captures each step's own stdout (passed to on_step_end as
-    `output`) instead of letting it print live — same idea as the CLI's
-    --quiet flag, useful for library callers that want to suppress the
-    analyzers' own print() noise until Bloque 3 replaces it with logging.
+      on_step_end(name, success, elapsed, error)
+    Each analyzer's own diagnostic output goes through loguru, silent by
+    default for library callers — call forti4d.configure_logging() first to
+    opt in to console/file output (the CLI does this automatically).
     `workers` controls per-file parallelism for the steps that support it
     (currently inventory and profiler; resolved via
     config.resolve_workers() — explicit argument > FORT_WORKERS env var >
@@ -261,11 +257,11 @@ def run_pipeline(
         if on_step_start:
             on_step_start(name, desc)
 
-        success, elapsed, error, output = run_step(name, module_path, ctx, capture_output=quiet)
+        success, elapsed, error = run_step(name, module_path, ctx)
         results.append((name, success, elapsed, error))
 
         if on_step_end:
-            on_step_end(name, success, elapsed, error, output)
+            on_step_end(name, success, elapsed, error)
 
         if not success and not continue_on_error:
             break
@@ -330,7 +326,10 @@ def main():
     parser.add_argument("--skip", nargs="+", metavar="STEP", help="Skip these steps.")
     parser.add_argument("--continue-on-error", action="store_true", help="Continue to next step even if a step fails.")
     parser.add_argument(
-        "--quiet", action="store_true", help="Suppress script output — show only step names and results."
+        "--quiet",
+        action="store_true",
+        help="Console log level WARNING+ instead of INFO+ (step progress is still shown; "
+        "the log file always keeps full DEBUG+ detail regardless of this flag).",
     )
     parser.add_argument(
         "--workers",
@@ -338,6 +337,13 @@ def main():
         metavar="N",
         help="Parallel workers for steps that support per-file parallelism (inventory, profiler, blocks). Default: 1 (sequential). Also settable via FORT_WORKERS.",
     )
+    parser.add_argument(
+        "--log-file",
+        dest="log_file",
+        metavar="PATH",
+        help="Override the log file location (default: <output>/forti4d.log).",
+    )
+    parser.add_argument("--no-log-file", action="store_true", help="Disable the log file entirely (console only).")
     args = parser.parse_args()
 
     # Resolve source/results dirs (flag > env var > default) and mirror them
@@ -387,6 +393,10 @@ def main():
         print("No steps to run after applying filters.")
         return
 
+    log_path = configure_logging(
+        results_dir, quiet=args.quiet, log_file=not args.no_log_file, log_path=args.log_file
+    )
+
     # Header
     print(f"\n{BOLD}=== Fortran Static Analysis Pipeline ==={RESET}")
     print(f"Project : {source_dir}")
@@ -401,10 +411,7 @@ def main():
         counter["i"] += 1
         print_step_header(counter["i"], total, name, desc, args.quiet)
 
-    def on_step_end(name, success, elapsed, error, output):
-        if not success and args.quiet and output:
-            for line in output.strip().splitlines()[-10:]:
-                print(f"    {RED}{line}{RESET}")
+    def on_step_end(name, success, elapsed, error):
         print_step_result(success, elapsed, args.quiet)
         if not success and not args.continue_on_error:
             print(
@@ -419,7 +426,6 @@ def main():
         only=args.only,
         skip=args.skip,
         continue_on_error=args.continue_on_error,
-        quiet=args.quiet,
         workers=args.workers,
         on_step_start=on_step_start,
         on_step_end=on_step_end,
@@ -443,7 +449,11 @@ def main():
         print(f"{GREEN}{BOLD}All {n_ok} steps completed successfully.{RESET}")
     else:
         print(f"{RED}{BOLD}{n_fail} step(s) failed.{RESET}  {n_ok} succeeded.")
+    if log_path:
+        print(f"{DIM}Full log: {log_path}{RESET}")
     print()
+
+    logger.complete()  # file sink uses enqueue=True (async) — flush before exit
 
 
 if __name__ == "__main__":

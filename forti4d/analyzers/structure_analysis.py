@@ -3,6 +3,7 @@ import os
 import csv
 from collections import defaultdict
 from pathlib import Path
+from loguru import logger
 from forti4d import config
 
 # =============================================================================
@@ -22,9 +23,9 @@ def load_matrix(rows=None, results_dir=None):
     if rows is None:
         impact_file = Path(results_dir) / "dep_03_impact_matrix.csv"
         if not impact_file.exists():
-            print(f"ERROR: '{impact_file}' does not exist. Run dependencies.py first.")
+            logger.error(f"ERROR: '{impact_file}' does not exist. Run dependencies.py first.")
             sys.exit(1)
-        print(f"Reading {impact_file}...")
+        logger.info(f"Reading {impact_file}...")
         with open(impact_file, "r", encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
 
@@ -67,7 +68,7 @@ def load_inventory_files(rows=None, results_dir=None):
     if rows is None:
         inventory_file = Path(results_dir) / "inventory_report.csv"
         if not inventory_file.exists():
-            print(f"Warning: '{inventory_file}' does not exist. ISLANDs will not be detected.")
+            logger.warning(f"Warning: '{inventory_file}' does not exist. ISLANDs will not be detected.")
             return known_files, files_with_implicit_main
         with open(inventory_file, "r", encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
@@ -170,7 +171,7 @@ def analyze_structure(source_dir, results_dir, *, inputs=None) -> dict:
     report_structure_analysis when there's nothing to process (same as the
     original — no file is written in that case either)."""
     inputs = inputs or {}
-    print(f"--- Architecture Analysis (Threshold: {CRITICAL_THRESHOLD}) ---")
+    logger.debug(f"--- Architecture Analysis (Threshold: {CRITICAL_THRESHOLD}) ---")
 
     data = load_matrix(rows=inputs.get("dep_03_impact_matrix"), results_dir=results_dir)
     known_files, files_with_implicit_main = load_inventory_files(
@@ -178,7 +179,7 @@ def analyze_structure(source_dir, results_dir, *, inputs=None) -> dict:
     )
 
     if not data and not known_files:
-        print("No data found to process.")
+        logger.warning("No data found to process.")
         return {"report_structure_analysis": None, "category_counts": {}}
 
     results = []
@@ -241,16 +242,16 @@ def write_structure(results_dir, data: dict) -> None:
             writer.writeheader()
             writer.writerows(results)
 
-        print(f"Report generated successfully: {output_file}")
-        print("\nCategory Statistics:")
+        logger.success(f"Report generated successfully: {output_file}")
+        logger.info("Category Statistics:")
         counts = data.get("category_counts", {})
         for cat in CATEGORY_PRIORITY:
             count = counts.get(cat, 0)
             if count:
-                print(f"  - {cat:15}: {count}")
+                logger.info(f"  - {cat:15}: {count}")
 
     except IOError as e:
-        print(f"Error writing the report: {e}")
+        logger.warning(f"Error writing the report: {e}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

@@ -4,6 +4,8 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 # --- PROJECT IMPORTS ---
 import forti4d.lib.reader_logical as reader_logical
 import forti4d.lib.patterns_v2 as patterns
@@ -256,26 +258,26 @@ def _safe_compute_file_density(rel_path, units_on_file, source_dir):
 
 
 def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None, workers: int = 1) -> dict:
-    print("STARTING DENSITY PROFILING (V3 Audited)")
+    logger.debug("STARTING DENSITY PROFILING (V3 Audited)")
     inputs = inputs or {}
 
     if not source_dir.exists():
-        print(f"ERROR: Directory {source_dir} does not exist")
+        logger.warning(f"ERROR: Directory {source_dir} does not exist")
         return {"report_density": [], "audit": {}}
 
     # 1. Load Inventory (in-memory from a prior step, or from disk standalone)
     try:
         inventory_list = load_inventory(rows=inputs.get("inventory_report"), csv_path=results_dir / "inventory_report.csv")
-        print(f"Inventory loaded: {len(inventory_list)} total records.")
+        logger.info(f"Inventory loaded: {len(inventory_list)} total records.")
     except ImportError:
-        print("ERROR: Function 'load_inventory' not found in inventory.py.")
+        logger.warning("ERROR: Function 'load_inventory' not found in inventory.py.")
         return {"report_density": [], "audit": {}}
     except Exception as e:
-        print(f"Error loading inventory: {e}")
+        logger.warning(f"Error loading inventory: {e}")
         return {"report_density": [], "audit": {}}
 
     if not inventory_list:
-        print("Inventory is empty or could not be read.")
+        logger.warning("Inventory is empty or could not be read.")
         return {"report_density": [], "audit": {}}
 
     # 2. Group units by File to avoid inefficient iterations
@@ -301,10 +303,10 @@ def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None, workers
 
     for idx, (rel_path, (ok, payload)) in enumerate(zip(sorted_files, per_file_results)):
         file_name = Path(rel_path).name
-        print(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
+        logger.debug(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
 
         if not ok:
-            print(f"  -> Read error/File not found: {payload}")
+            logger.warning(f"  -> Read error/File not found: {payload}")
             continue
         debug_rows, summary_rows = payload
 
@@ -319,9 +321,9 @@ def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None, workers
                 writer = csv.DictWriter(f, fieldnames=["Line", "Kind", "Content"])
                 writer.writeheader()
                 writer.writerows(debug_rows)
-            print(f"  -> Audit saved to: {debug_path}")
+            logger.debug(f"  -> Audit saved to: {debug_path}")
         except Exception as e:
-            print(f"  -> Error saving debug: {e}")
+            logger.warning(f"  -> Error saving debug: {e}")
 
         audit_data[rel_path] = debug_rows
         output_data.extend(summary_rows)
@@ -358,9 +360,9 @@ def write_density(results_dir: Path, data: dict) -> None:
             w = csv.DictWriter(f, fieldnames=headers)
             w.writeheader()
             w.writerows(data["report_density"])
-        print(f"\nREPORT GENERATED: {csv_output}")
+        logger.success(f"REPORT GENERATED: {csv_output}")
     except Exception as e:
-        print(f"Error writing CSV: {e}")
+        logger.warning(f"Error writing CSV: {e}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None, workers=None):

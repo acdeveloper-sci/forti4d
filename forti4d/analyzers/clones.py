@@ -15,6 +15,8 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d.lib.reader_logical import read_logical_lines
 from forti4d import config
@@ -98,7 +100,7 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
         rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
     )
     if not inventory_list:
-        print("ERROR: inventory is empty. Run inventory.py first.")
+        logger.warning("ERROR: inventory is empty. Run inventory.py first.")
         return {"report_clones": None}
 
     # Index: (file_basename, name_upper) → {type, start, end}
@@ -116,7 +118,7 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
     if ambiguities_rows is None:
         ambiguities_path = Path(results_dir) / "dep_00_ambiguities.csv"
         if not ambiguities_path.exists():
-            print("No ambiguous unit names found — skipping clone comparison.")
+            logger.info("No ambiguous unit names found — skipping clone comparison.")
             return {"report_clones": []}
         with open(ambiguities_path, encoding="utf-8-sig") as f:
             ambiguities_rows = list(csv.DictReader(f))
@@ -130,7 +132,7 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
             groups.append((name, utype, files))
 
     if not groups:
-        print("No duplicate units found.")
+        logger.info("No duplicate units found.")
         return {"report_clones": []}
 
     # Build file path index
@@ -203,11 +205,11 @@ def write_clones(results_dir, data: dict) -> None:
     n_sim = sum(1 for r in rows if r["Status"] == "SIMILAR")
     n_div = sum(1 for r in rows if r["Status"] == "DIVERGED")
 
-    print(f"\n{len(rows)} pairs compared  ({data['n_groups']} units with duplicates)")
-    print(f"  IDENTICAL : {n_id}")
-    print(f"  SIMILAR   : {n_sim}")
-    print(f"  DIVERGED  : {n_div}")
-    print(f"\nGenerated: {output_file}")
+    logger.info(f"{len(rows)} pairs compared  ({data['n_groups']} units with duplicates)")
+    logger.info(f"  IDENTICAL : {n_id}")
+    logger.info(f"  SIMILAR   : {n_sim}")
+    logger.info(f"  DIVERGED  : {n_div}")
+    logger.success(f"Generated: {output_file}")
 
 
 def _write_empty_csv(path, columns):

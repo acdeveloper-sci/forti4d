@@ -5,6 +5,8 @@ from pathlib import Path
 from collections import defaultdict, Counter
 from typing import List, Dict, Set, Tuple
 
+from loguru import logger
+
 # --- IMPORT OF BASE TOOLS ---
 try:
     from forti4d.lib.reader_logical import read_logical_lines
@@ -16,7 +18,7 @@ try:
         RE_INTERFACE,
     )
 except ImportError as e:
-    print(f"ERROR: Missing base files (reader.py or patterns.py).\n{e}")
+    logger.error(f"ERROR: Missing base files (reader.py or patterns.py).\n{e}")
     sys.exit(1)
 
 # =============================================================================
@@ -257,10 +259,10 @@ def load_inventory_enhanced(rows=None, results_dir=None) -> Tuple[Dict, Dict, Li
     if rows is None:
         inventory_file = Path(results_dir) / "inventory_report.csv"
         if not inventory_file.exists():
-            print(f"ERROR: '{inventory_file}' does not exist. Run inventory.py first.")
+            logger.error(f"ERROR: '{inventory_file}' does not exist. Run inventory.py first.")
             sys.exit(1)
 
-        print("Loading inventory...")
+        logger.info("Loading inventory...")
         with open(inventory_file, "r", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
 
@@ -321,7 +323,7 @@ def scan_file(file_path: Path, source_path: Path = None) -> List[Dict]:
     try:
         logical_lines = read_logical_lines(str(file_path))
     except Exception as e:
-        print(f"Error reading {file_path.name}: {e}")
+        logger.warning(f"Error reading {file_path.name}: {e}")
         return []
 
     # Base name for implicit units
@@ -515,7 +517,7 @@ def analyze_dependencies(source_dir: Path, results_dir: Path, *, inputs=None) ->
 
     # 2. Scan Files
     files = sorted([f for f in source_path.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
-    print(f"Analyzing {len(files)} files...")
+    logger.info(f"Analyzing {len(files)} files...")
 
     all_raw_deps = []
     for f in files:
@@ -538,7 +540,7 @@ def analyze_dependencies(source_dir: Path, results_dir: Path, *, inputs=None) ->
     file_deps_map = defaultdict(set)
     file_deps_details = defaultdict(set)  # To list dep types (USE, CALL...)
 
-    print("Resolving dependencies with Scope...")
+    logger.info("Resolving dependencies with Scope...")
 
     for item in all_raw_deps:
         target = item["target_raw"]
@@ -759,9 +761,9 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(ambiguous_rows)
     if ambiguous_rows:
-        print(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {ambiguities_out})")
+        logger.success(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {ambiguities_out})")
     else:
-        print(f"  -> No ambiguous unit names found (see {ambiguities_out})")
+        logger.success(f"  -> No ambiguous unit names found (see {ambiguities_out})")
 
     # A. Master
     keys_master = [
@@ -780,7 +782,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(master_rows)
     if master_rows:
-        print(f"Generated:{master_out}")
+        logger.success(f"Generated:{master_out}")
 
     # B. Units Graph
     graph_rows = data["dep_02_unit_graph"]
@@ -792,7 +794,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(graph_rows)
     if graph_rows:
-        print(f"Generated:{graph_out}")
+        logger.success(f"Generated:{graph_out}")
 
     # C. Impact Matrix
     rows_impact = data["dep_03_impact_matrix"]
@@ -801,7 +803,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(rows_impact)
     if rows_impact:
-        print(f"Generated:{impact_out}")
+        logger.success(f"Generated:{impact_out}")
 
     # D. Orphans
     orphan_rows = data["dep_04_external_orphans"]
@@ -810,7 +812,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(orphan_rows)
     if orphan_rows:
-        print(f"Generated:{orphans_out}")
+        logger.success(f"Generated:{orphans_out}")
 
     # E. File Dependencies
     file_rows = data["dep_05_file_dependencies"]
@@ -820,7 +822,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(file_rows)
     if file_rows:
-        print(f"Generated:{depends_out}")
+        logger.success(f"Generated:{depends_out}")
 
     # F. INCLUDE file references
     include_rows = data["dep_06_include_files"]
@@ -830,7 +832,7 @@ def write_dependencies(results_dir: Path, data: dict) -> None:
         w.writeheader()
         w.writerows(include_rows)
     if include_rows:
-        print(f"Generated: {includes_out} ({len(include_rows)} INCLUDE references)")
+        logger.success(f"Generated: {includes_out} ({len(include_rows)} INCLUDE references)")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

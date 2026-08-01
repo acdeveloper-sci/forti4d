@@ -4,6 +4,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -69,7 +71,7 @@ def extract_blocks(content: str) -> list:
 def analyze_common(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes."""
     inputs = inputs or {}
-    print("--- COMMON Block Analysis ---")
+    logger.debug("--- COMMON Block Analysis ---")
 
     # 1. Load inventory
     try:
@@ -77,11 +79,11 @@ def analyze_common(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"common_usage": None, "common_coupling": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"common_usage": None, "common_coupling": None}
 
     # Type conversion and grouping by file
@@ -159,8 +161,8 @@ def analyze_common(source_dir, results_dir, *, inputs=None) -> dict:
                 total_common += 1
 
     if total_common == 0:
-        print("No COMMON statements found in the corpus.")
-        print("(The code uses F90 modules instead of COMMON blocks)")
+        logger.info("No COMMON statements found in the corpus.")
+        logger.info("(The code uses F90 modules instead of COMMON blocks)")
         return {"common_usage": [], "common_coupling": [], "empty": True}
 
     # 2. Build usage report (one row per (unit, block))
@@ -241,26 +243,24 @@ def write_common(results_dir, data: dict) -> None:
     n_blocks = len(docking_rows)
     n_units_affected = len(set((r["File"], r["Unit"]) for r in row_usage))
 
-    print(f"COMMON statements found       : {total_common}")
-    print(f"Unique blocks                 : {n_blocks}")
-    print(f"Units with COMMON             : {n_units_affected}")
-    print()
+    logger.info(f"COMMON statements found       : {total_common}")
+    logger.info(f"Unique blocks                 : {n_blocks}")
+    logger.info(f"Units with COMMON             : {n_units_affected}")
 
     from collections import Counter
 
     risks = Counter(r["Risk"] for r in docking_rows)
-    print("Coupling distribution by block:")
+    logger.info("Coupling distribution by block:")
     for level in ("HIGH", "MEDIUM", "LOW"):
         n = risks.get(level, 0)
         if n:
-            print(f"  {level:6}: {n} block(s)")
+            logger.info(f"  {level:6}: {n} block(s)")
 
-    print()
-    print("Most coupled blocks (shared by most units):")
+    logger.info("Most coupled blocks (shared by most units):")
     for r in docking_rows[:10]:
-        print(f"  {r['Block']:20}  {r['N_Units']:3} units  " f"[{r['Risk']}]  → {r['Units'][:60]}")
+        logger.info(f"  {r['Block']:20}  {r['N_Units']:3} units  " f"[{r['Risk']}]  → {r['Units'][:60]}")
 
-    print(f"\nGenerated: {usage_output}, {coupling_output}")
+    logger.success(f"Generated: {usage_output}, {coupling_output}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):
@@ -286,7 +286,7 @@ def _write_csv(path, rows, columns):
 def _write_empty_csv(path, columns):
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         csv.DictWriter(f, fieldnames=columns).writeheader()
-    print(f"  {path} generated (empty — no COMMON in corpus)")
+    logger.success(f"  {path} generated (empty — no COMMON in corpus)")
 
 
 if __name__ == "__main__":

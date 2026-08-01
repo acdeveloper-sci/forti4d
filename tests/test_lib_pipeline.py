@@ -30,7 +30,7 @@ def test_library_matches_cli(tmp_path):
     lib_dir = tmp_path / "lib"
     cli_dir = tmp_path / "cli"
 
-    result = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=lib_dir, quiet=True)
+    result = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=lib_dir)
     assert all(success for _, success, _, _ in result.steps), result.steps
 
     proc = subprocess.run(
@@ -46,5 +46,10 @@ def test_library_matches_cli(tmp_path):
     # report.html embeds a generation timestamp — exclude from strict comparison.
     lib_manifest.pop("report.html", None)
     cli_manifest.pop("report.html", None)
+
+    # forti4d.log: only the CLI configures logging (library callers stay
+    # silent by default), and its timestamps aren't reproducible anyway.
+    lib_manifest.pop("forti4d.log", None)
+    cli_manifest.pop("forti4d.log", None)
 
     assert lib_manifest == cli_manifest

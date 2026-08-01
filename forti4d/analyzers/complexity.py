@@ -3,6 +3,8 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -76,7 +78,7 @@ def analyze_complexity(source_dir, results_dir, *, inputs=None) -> dict:
     when there's nothing to process (same as the original — no file is
     written in that case either)."""
     inputs = inputs or {}
-    print("--- McCabe Cyclomatic Complexity ---")
+    logger.debug("--- McCabe Cyclomatic Complexity ---")
 
     # 1. Load inventory
     try:
@@ -84,14 +86,14 @@ def analyze_complexity(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"report_complexity": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"report_complexity": None}
 
-    print(f"Inventory loaded: {len(inventory_list)} units.")
+    logger.info(f"Inventory loaded: {len(inventory_list)} units.")
 
     # Convert numeric types and group by file
     units_file_map = defaultdict(list)
@@ -121,7 +123,7 @@ def analyze_complexity(source_dir, results_dir, *, inputs=None) -> dict:
             debug_stem = rel_path.replace("/", "__").replace("\\", "__")
             debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
             if not debug_file.exists():
-                print(f"  [{idx+1}] No DEBUG file: {file_name} — skipped")
+                logger.warning(f"  [{idx+1}] No DEBUG file: {file_name} — skipped")
                 continue
             with open(debug_file, encoding="utf-8-sig") as f:
                 debug_rows = list(csv.DictReader(f))
@@ -198,9 +200,9 @@ def write_complexity(results_dir, data: dict) -> None:
             writer = csv.DictWriter(f, fieldnames=columns)
             writer.writeheader()
             writer.writerows(output_data)
-        print(f"\nReport generated: {output_file}")
+        logger.success(f"Report generated: {output_file}")
     except IOError as e:
-        print(f"Error writing CSV: {e}")
+        logger.warning(f"Error writing CSV: {e}")
         return
 
     # 5. Console summary
@@ -208,15 +210,15 @@ def write_complexity(results_dir, data: dict) -> None:
 
     count = Counter(r["Level"] for r in output_data)
 
-    print(f"\nDistribution ({len(output_data)} units):")
+    logger.info(f"Distribution ({len(output_data)} units):")
     for level in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         n = count.get(level, 0)
         if n:
-            print(f"  {level:8}: {n:4}")
+            logger.info(f"  {level:8}: {n:4}")
 
-    print(f"\nTop 10 most complex units:")
+    logger.info("Top 10 most complex units:")
     for r in output_data[:10]:
-        print(f"  CC={r['CC']:5}  {r['Level']:8}  " f"{r['File']:25} {r['Unit']}")
+        logger.info(f"  CC={r['CC']:5}  {r['Level']:8}  " f"{r['File']:25} {r['Unit']}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

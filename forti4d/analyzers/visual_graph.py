@@ -22,6 +22,8 @@ import sys
 from collections import defaultdict, deque
 from pathlib import Path
 
+from loguru import logger
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -362,7 +364,7 @@ def run(source_dir, results_dir, *, inputs=None) -> dict:
 
     graph_csv = results_dir / "dep_02_unit_graph.csv"
     if inputs.get("dep_02_unit_graph") is None and not graph_csv.exists():
-        print(f"ERROR: Not found {graph_csv}")
+        logger.warning(f"ERROR: Not found {graph_csv}")
         return {"graph_complete_dot": None, "graph_simple_dot": None}
 
     meta = load_consolidated(rows=inputs.get("report_consolidated"), results_dir=results_dir)
@@ -373,7 +375,7 @@ def run(source_dir, results_dir, *, inputs=None) -> dict:
     n_call = sum(1 for e in raw_edges if e["Dep_Type"] == "CALL")
     n_func = sum(1 for e in raw_edges if e["Dep_Type"] == "FUNC_CALL")
     n_use = sum(1 for e in raw_edges if e["Dep_Type"] == "USE")
-    print(f"Graph: {len(meta)} nodes  |  {n_call} CALL  {n_func} FUNC_CALL  {n_use} USE")
+    logger.info(f"Graph: {len(meta)} nodes  |  {n_call} CALL  {n_func} FUNC_CALL  {n_use} USE")
 
     node_eps = calculate_scope(available_eps, edges_am)
     colors_ep = assign_colors_ep(available_eps)
@@ -419,19 +421,17 @@ def write_graphs(results_dir, data: dict) -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
 
     (results_dir / "graph_complete.dot").write_text(dot_full, encoding="utf-8")
-    print(f"Generated:{results_dir / 'graph_complete.dot'}")
+    logger.success(f"Generated:{results_dir / 'graph_complete.dot'}")
 
     (results_dir / "graph_simple.dot").write_text(data["graph_simple_dot"], encoding="utf-8")
-    print(f"Generated:{results_dir / 'graph_simple.dot'}")
+    logger.success(f"Generated:{results_dir / 'graph_simple.dot'}")
 
-    print()
-    print("Torender:")
-    print("  dot -Tpng  graph_simple.dot   -o graph_simple.png")
-    print("  dot -Tsvg  graph_complete.dot -o graph_complete.svg")
-    print()
-    print("For a specific executable:")
-    print("  python visual_graph.py --list")
-    print("  python visual_graph.py --entry mcdes")
+    logger.info("To render:")
+    logger.info("  dot -Tpng  graph_simple.dot   -o graph_simple.png")
+    logger.info("  dot -Tsvg  graph_complete.dot -o graph_complete.svg")
+    logger.info("For a specific executable:")
+    logger.info("  python visual_graph.py --list")
+    logger.info("  python visual_graph.py --entry mcdes")
 
 
 # =============================================================================

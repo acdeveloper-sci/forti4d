@@ -15,6 +15,8 @@ import html
 from datetime import datetime
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d import config
 
 # Visible columns in the main table: (CSV_field, display_label)
@@ -59,7 +61,7 @@ def data_load(rows=None, results_dir=None):
         return rows
     priority_csv = Path(results_dir) / "report_prioritization.csv"
     if not priority_csv.exists():
-        print(f"ERROR: {priority_csv} not found. Run prioritization.py first.")
+        logger.warning(f"ERROR: {priority_csv} not found. Run prioritization.py first.")
         return []
     with open(priority_csv, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
@@ -293,7 +295,7 @@ def write_html_report(results_dir, data: dict) -> None:
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(doc)
 
-    print(f"Generated: {output_file} ({data['n_units']} units)")
+    logger.success(f"Generated: {output_file} ({data['n_units']} units)")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

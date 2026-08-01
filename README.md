@@ -39,8 +39,13 @@ forti4d                                        # run full 19-step pipeline
 forti4d --project ../myproject --output out/   # specify source and output dirs
 forti4d --list                                 # show all pipeline steps
 forti4d --from symbols                         # resume from a specific step
-forti4d --quiet                                # suppress step output
+forti4d --quiet                                # console shows WARNING+ only
+forti4d --no-log-file                          # disable <output>/forti4d.log
 ```
+
+Every run writes a full-detail log to `<output>/forti4d.log` (DEBUG and up,
+regardless of `--quiet`, which only affects the console). Use `--log-file PATH`
+to override the location, or `--no-log-file` to skip it entirely.
 
 See `doc/scripts/pipeline.md` for all flags and options.
 
@@ -51,7 +56,8 @@ See `doc/scripts/pipeline.md` for all flags and options.
 - Python 3.8+
 - [Graphviz](https://graphviz.org/) — only required for rendering `.dot` files
   produced by `visual_graph.py`
-- No third-party Python packages — standard library only
+- [loguru](https://github.com/Delgan/loguru) — the only third-party
+  dependency, used for console/file logging
 
 ---
 

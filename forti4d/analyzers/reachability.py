@@ -3,6 +3,8 @@ import sys
 from collections import defaultdict, deque
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -29,7 +31,7 @@ def load_graph(rows=None, results_dir=None):
             with open(graph_csv, encoding="utf-8-sig") as f:
                 rows = list(csv.DictReader(f))
         except FileNotFoundError:
-            print(f"ERROR: {graph_csv} not found")
+            logger.error(f"ERROR: {graph_csv} not found")
             sys.exit(1)
 
     for row in rows:
@@ -112,7 +114,7 @@ def analyze_reachability(source_dir, results_dir, *, inputs=None) -> dict:
     original); an empty list when there's no data to analyze (headers-only
     file is still written, same as the original)."""
     inputs = inputs or {}
-    print("--- Reachability / Dead Code Analysis ---")
+    logger.debug("--- Reachability / Dead Code Analysis ---")
 
     # 1. Load inventory
     try:
@@ -120,11 +122,11 @@ def analyze_reachability(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"report_reachability": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"report_reachability": []}
 
     # 2. Identify entry points
@@ -135,14 +137,14 @@ def analyze_reachability(source_dir, results_dir, *, inputs=None) -> dict:
     ]
 
     if not eps_units:
-        print("No entry points found (PROGRAM / IMPLICIT-MAIN) — writing empty report.")
+        logger.warning("No entry points found (PROGRAM / IMPLICIT-MAIN) — writing empty report.")
         return {"report_reachability": []}
 
-    print(f"Entry points detected: {len(eps_units)}")
+    logger.info(f"Entry points detected: {len(eps_units)}")
 
     # 3. Load graph with case-insensitive index
     graph, nodes_upper = load_graph(rows=inputs.get("dep_02_unit_graph"), results_dir=results_dir)
-    print(f"Graph loaded: {sum(len(v) for v in graph.values())} edges " f"({len(graph)} source nodes)")
+    logger.info(f"Graph loaded: {sum(len(v) for v in graph.values())} edges " f"({len(graph)} source nodes)")
 
     # 4. Map entry points to graph nodes and prepare seeds for BFS
     #    ep_label: human-readable name of the entry point (for Via_Entradas column)
@@ -155,13 +157,13 @@ def analyze_reachability(source_dir, results_dir, *, inputs=None) -> dict:
         if node:
             seeds.append(node)
             ep_label[node] = label
-            print(f"  {label:25} -> node graph: {node}")
+            logger.info(f"  {label:25} -> node graph: {node}")
         else:
             # The entry point does not appear in the graph at all
             # (no outgoing or incoming dependencies recorded)
             seeds.append(label)  # we use the name inventory
             ep_label[label] = label
-            print(f"  {label:25} -> (no node in graph)")
+            logger.info(f"  {label:25} -> (no node in graph)")
 
     # 5. BFS
     visited = calculate_reachability(graph, seeds)
@@ -289,25 +291,25 @@ def write_reachability(results_dir, data: dict) -> None:
     n_live = count["REACHABLE"]
     n_ep = count["ENTRY_POINT"]
 
-    print(f"\nTotal units analyzed : {total}")
-    print(f"  ENTRY_POINT        : {n_ep}")
-    print(f"  REACHABLE          : {n_live}")
-    print(f"  UNREACHABLE (dead) : {n_dead}  ({n_dead/total*100:.1f}%)")
+    logger.info(f"Total units analyzed : {total}")
+    logger.info(f"  ENTRY_POINT        : {n_ep}")
+    logger.info(f"  REACHABLE          : {n_live}")
+    logger.info(f"  UNREACHABLE (dead) : {n_dead}  ({n_dead/total*100:.1f}%)")
 
     if n_dead > 0:
-        print("\nUnits not reachable from any entry point:")
+        logger.info("Units not reachable from any entry point:")
         deads = [r for r in rows if r["Status"] == "UNREACHABLE"]
         # Group by file for readability
         current_file = None
         for r in deads:
             if r["File"] != current_file:
                 current_file = r["File"]
-                print(f"\n  [{current_file}]")
+                logger.info(f"  [{current_file}]")
             type_str = f"[{r['Type']}]"
             parent_str = f" (in {r['Parent']})" if r["Parent"] != "GLOBAL" else ""
-            print(f"    {r['Unit']:30} {type_str}{parent_str}")
+            logger.info(f"    {r['Unit']:30} {type_str}{parent_str}")
 
-    print(f"\nGenerated: {output_file}")
+    logger.success(f"Generated: {output_file}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

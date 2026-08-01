@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import List, Set, Dict
 
+from loguru import logger
+
 try:
     from forti4d.lib.reader_logical import read_logical_lines
     from forti4d.lib.patterns_v1 import (
@@ -17,7 +19,7 @@ try:
         RE_INTERFACE,
     )
 except ImportError as e:
-    print(f"ERROR: {e}")
+    logger.error(f"ERROR: {e}")
     sys.exit(1)
 
 # =============================================================================
@@ -146,7 +148,7 @@ def load_inventory(rows=None, csv_path=None):
     retrieved_data = []
 
     if not csv_path.exists():
-        print(f"Warning: Inventory file not found: {csv_path}")
+        logger.warning(f"Warning: Inventory file not found: {csv_path}")
         return []
 
     try:
@@ -168,7 +170,7 @@ def load_inventory(rows=None, csv_path=None):
                 retrieved_data.append(row)
 
     except Exception as e:
-        print(f"Critical error reading inventory: {e}")
+        logger.warning(f"Critical error reading inventory: {e}")
         return []
 
     return retrieved_data
@@ -389,7 +391,7 @@ def analyze_inventory(source_dir: Path, *, workers: int = 1) -> list:
     from forti4d.lib import parallel
 
     files = sorted([f for f in source_dir.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
-    print(f"--- Inventory V4 (Fortran Hierarchy) ---")
+    logger.debug("--- Inventory V4 (Fortran Hierarchy) ---")
 
     # audit_file is passed unwrapped (no try/except) — if a file raises, the
     # whole step fails, same in sequential and parallel mode (see
@@ -422,7 +424,7 @@ def write_inventory(results_dir: Path, rows: list) -> None:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
             writer.writerows(rows)
-        print(f"Report generated: {output_file}")
+        logger.success(f"Report generated: {output_file}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None, workers=None):
@@ -430,7 +432,7 @@ def main(source_dir=None, results_dir=None, *, inputs=None, workers=None):
     source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
     workers = config.resolve_workers(workers)
     if not source_dir.exists():
-        print(f"Error: '{source_dir}' does not exist")
+        logger.warning(f"Error: '{source_dir}' does not exist")
         return {"inventory_report": []}
 
     data = analyze_inventory(source_dir, workers=workers)

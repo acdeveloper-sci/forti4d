@@ -26,6 +26,10 @@ def compute_manifest(results_dir: Path) -> dict[str, str]:
     for path in sorted(results_dir.rglob("*")):
         if path.is_file():
             rel = path.relative_to(results_dir).as_posix()
+            if rel == "forti4d.log":
+                # Every line carries a non-reproducible timestamp — unlike
+                # report.html's single datetime.now(), not worth normalizing.
+                continue
             content = path.read_bytes()
             if rel == "report.html":
                 content = _TIMESTAMP_RE.sub(b"TIMESTAMP", content)

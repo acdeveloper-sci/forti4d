@@ -2,6 +2,7 @@ import csv
 import sys
 import os
 from pathlib import Path
+from loguru import logger
 from forti4d import config
 
 # E4 penalty on ICM (additive points, scale 0-100)
@@ -97,7 +98,7 @@ def load_impact(rows=None, results_dir=None):
     if rows is None:
         impact_file = Path(results_dir) / "dep_03_impact_matrix.csv"
         if not impact_file.exists():
-            print(f"ERROR: {impact_file} not found")
+            logger.error(f"ERROR: {impact_file} not found")
             sys.exit(1)
         with open(impact_file, "r", encoding="utf-8-sig", errors="replace") as f:
             rows = list(csv.DictReader(f))
@@ -154,10 +155,10 @@ def define_strategy(row, ivc, icm, state_reached=""):
 def analyze_cross(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes."""
     inputs = inputs or {}
-    print("--- Cross Migration Analysis (Standard Lib) ---")
+    logger.debug("--- Cross Migration Analysis (Standard Lib) ---")
 
     # 1. Load Dependency data into memory (Hash Map)
-    print("Loading impact matrix...")
+    logger.info("Loading impact matrix...")
     impact_map = load_impact(rows=inputs.get("dep_03_impact_matrix"), results_dir=results_dir)
 
     # 1b. Optional sources — in current pipeline order these steps haven't
@@ -168,23 +169,23 @@ def analyze_cross(source_dir, results_dir, *, inputs=None) -> dict:
         impl_rows=inputs.get("symbol_implicit"), equiv_rows=inputs.get("equivalences"), results_dir=results_dir
     )
     if reach_map:
-        print(f"  Reachability loaded: {len(reach_map)} units")
+        logger.info(f"  Reachability loaded: {len(reach_map)} units")
     if impl_none_set or equiv_set:
-        print(f"  E4: {len(impl_none_set)} with IMPLICIT NONE, {len(equiv_set)} with EQUIVALENCE")
+        logger.info(f"  E4: {len(impl_none_set)} with IMPLICIT NONE, {len(equiv_set)} with EQUIVALENCE")
 
     # 2. Process Density and Cross-reference
     density_rows = inputs.get("report_density")
     if density_rows is None:
         density_file = Path(results_dir) / "report_density.csv"
         if not density_file.exists():
-            print(f"ERROR: {density_file} not found")
+            logger.error(f"ERROR: {density_file} not found")
             sys.exit(1)
         with open(density_file, "r", encoding="utf-8-sig", errors="replace") as f:
             density_rows = list(csv.DictReader(f))
 
     results = []
 
-    print("Processing and classifying units...")
+    logger.info("Processing and classifying units...")
     for row in density_rows:
         # Retrieve data from the density CSV and convert types
         file = row["File"]
@@ -259,7 +260,7 @@ def analyze_cross(source_dir, results_dir, *, inputs=None) -> dict:
     # 3. Sorting
     # Equivalent to df.sort_values(['Priority_Num', 'IVC'], ascending=[True, False])
     # Python sort is stable; we sort by secondary criterion first, then primary (or use tuple with negation)
-    print("Sorting results by priority...")
+    logger.info("Sorting results by priority...")
     results.sort(key=lambda x: (x["Priority_Num"], -x["IVC"]))
 
     return {"report_migration_strategy": results}
@@ -292,7 +293,7 @@ def write_cross(results_dir, data: dict) -> None:
             writer.writeheader()
             writer.writerows(results)
 
-        print(f"SUCCESS: Report generated at '{output_file}'")
+        logger.success(f"SUCCESS: Report generated at '{output_file}'")
 
         # Generate brief summary to console
         count = {}
@@ -300,12 +301,12 @@ def write_cross(results_dir, data: dict) -> None:
             est = r["Strategy"]
             count[est] = count.get(est, 0) + 1
 
-        print("\n--- STRATEGY SUMMARY ---")
+        logger.info("--- STRATEGY SUMMARY ---")
         for k, v in sorted(count.items()):
-            print(f"{k}: {v}")
+            logger.info(f"{k}: {v}")
 
     except Exception as e:
-        print(f"Error writing file: {e}")
+        logger.warning(f"Error writing file: {e}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

@@ -24,6 +24,9 @@ import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+from loguru import logger
+
 from forti4d import config
 
 
@@ -165,7 +168,7 @@ def count_stmts_audit(inv_raw: dict, results_dir: Path, audit_data: dict = None)
 
 
 def load_sources(results_dir, *, inputs=None):
-    print("Loading sources...")
+    logger.debug("Loading sources...")
     inputs = inputs or {}
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -175,7 +178,7 @@ def load_sources(results_dir, *, inputs=None):
     if inv_rows is None:
         inventory_path = results_dir / "inventory_report.csv"
         if not inventory_path.exists():
-            print(f"ERROR: {inventory_path} not found.")
+            logger.error(f"ERROR: {inventory_path} not found.")
             sys.exit(1)
         with open(inventory_path, encoding="utf-8-sig") as f:
             inv_rows = list(csv.DictReader(f))
@@ -214,23 +217,23 @@ def load_sources(results_dir, *, inputs=None):
     type_multi = read_source(inputs.get("type_definitions"), results_dir / "type_definitions.csv", key_type, multi=True)
     equiv_multi = read_source(inputs.get("equivalences"), results_dir / "equivalences.csv", key_au, multi=True)
 
-    print(f"  inventory    : {len(inv_raw)} units")
-    print(f"  sloc         : {len(sloc_data)} entries")
-    print(f"  complexity   : {len(cc_data)} entries")
-    print(f"  density      : {len(dens_data)} entries")
-    print(f"  reachability : {len(reach_data)} entries")
-    print(f"  impact       : {len(imp_data)} entries")
-    print(f"  common_usage : {len(common_multi)} units with COMMON")
-    print(f"  symbol_vars  : {sum(len(v) for v in vars_multi.values())} vars in {len(vars_multi)} units")
-    print(f"  symbol_signatures: {sum(len(v) for v in signat_multi.values())} args in {len(signat_multi)} units")
-    print(f"  tipos_def    : {sum(len(v) for v in type_multi.values())} types in {len(type_multi)} units")
-    print(f"  equivalences : {sum(len(v) for v in equiv_multi.values())} vars in {len(equiv_multi)} units")
+    logger.info(f"  inventory    : {len(inv_raw)} units")
+    logger.info(f"  sloc         : {len(sloc_data)} entries")
+    logger.info(f"  complexity   : {len(cc_data)} entries")
+    logger.info(f"  density      : {len(dens_data)} entries")
+    logger.info(f"  reachability : {len(reach_data)} entries")
+    logger.info(f"  impact       : {len(imp_data)} entries")
+    logger.info(f"  common_usage : {len(common_multi)} units with COMMON")
+    logger.info(f"  symbol_vars  : {sum(len(v) for v in vars_multi.values())} vars in {len(vars_multi)} units")
+    logger.info(f"  symbol_signatures: {sum(len(v) for v in signat_multi.values())} args in {len(signat_multi)} units")
+    logger.info(f"  tipos_def    : {sum(len(v) for v in type_multi.values())} types in {len(type_multi)} units")
+    logger.info(f"  equivalences : {sum(len(v) for v in equiv_multi.values())} vars in {len(equiv_multi)} units")
 
     audit_stmts = count_stmts_audit(inv_raw, results_dir, audit_data=inputs.get("audit"))
     n_data = sum(v["N_Data_Stmts"] for v in audit_stmts.values())
     n_entry = sum(v["N_Entry_Stmts"] for v in audit_stmts.values())
     if audit_stmts:
-        print(f"  audit stmts  : {n_data} DATA_STMT, {n_entry} ENTRY_STMT in {len(audit_stmts)} units")
+        logger.info(f"  audit stmts  : {n_data} DATA_STMT, {n_entry} ENTRY_STMT in {len(audit_stmts)} units")
 
     return (
         inv_raw,
@@ -434,13 +437,13 @@ def analyze_consolidate(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes. Returns None for
     report_consolidated when there's nothing to process (same as the
     original — no file is written in that case)."""
-    print("=== Report Consolidation ===\n")
+    logger.debug("=== Report Consolidation ===")
 
     sources = load_sources(results_dir, inputs=inputs)
     rows = build_rows(*sources)
 
     if not rows:
-        print("No rows to export.")
+        logger.warning("No rows to export.")
         return {"report_consolidated": None}
 
     # Sort: first by file, then by implicit Start_Line order from
@@ -471,19 +474,19 @@ def write_consolidate(results_dir, data: dict) -> None:
     criticals = sum(1 for r in rows if r["CC_Level"] == "CRITICAL")
     no_coment = sum(1 for r in rows if r["Pct_Comment"] == 0 and r["SLOC_net"] > 10)
 
-    print(f"\nConsolidated report generated: {output_file}")
-    print(f"  Total rows              : {total}")
-    print(f"  With CC metrics         : {con_cc}")
-    print(f"  UNREACHABLE units       : {deads}")
-    print(f"  CRITICAL CC level       : {criticals}")
-    print(f"  Without comments (>10 sl): {no_coment}")
-    print(f"  Without SLOC (empty/err): {no_sloc}")
+    logger.success(f"Consolidated report generated: {output_file}")
+    logger.info(f"  Total rows              : {total}")
+    logger.info(f"  With CC metrics         : {con_cc}")
+    logger.info(f"  UNREACHABLE units       : {deads}")
+    logger.info(f"  CRITICAL CC level       : {criticals}")
+    logger.info(f"  Without comments (>10 sl): {no_coment}")
+    logger.info(f"  Without SLOC (empty/err): {no_sloc}")
 
     # Top risk: high CC + high Fan_In + few comments
-    print("\nTop 10 refactoring candidates (CC × Fan_In):")
+    logger.info("Top 10 refactoring candidates (CC × Fan_In):")
     top = sorted(rows, key=lambda r: -(r["CC"] * max(r["Fan_In"], 1)))
     for r in top[:10]:
-        print(
+        logger.info(
             f"  CC={r['CC']:5}  Fan_In={r['Fan_In']:3}  {r['Pct_Comment']:4.1f}%comment  " f"{r['File']:25} {r['Unit']}"
         )
 

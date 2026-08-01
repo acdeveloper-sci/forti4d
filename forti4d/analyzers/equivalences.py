@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -153,7 +155,7 @@ def extract_equivalences(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes. Returns None when there's nothing
     to process (same as the original — no file is written in that case)."""
     inputs = inputs or {}
-    print("--- Equivalences Extraction ---")
+    logger.debug("--- Equivalences Extraction ---")
 
     # 1. Inventory
     try:
@@ -161,11 +163,11 @@ def extract_equivalences(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"equivalences": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"equivalences": None}
 
     units_map = defaultdict(list)
@@ -270,13 +272,12 @@ def write_equivalences(results_dir, data: dict) -> None:
     n_files = len({f["File"] for f in rows})
     n_units = len({(f["File"], f["Unit"]) for f in rows})
     total_n_groups = len({(f["File"], f["Unit"], f["Group_ID"]) for f in rows})
-    print(f"Files with EQUIVALENCE   : {n_files}")
-    print(f"Units with EQUIVALENCE   : {n_units}")
-    print(f"Aliasing groups          : {total_n_groups}")
-    print(f"Variables in groups      : {len(rows)}")
-    print()
-    print(f"Generated:")
-    print(f"  {output_file}")
+    logger.info(f"Files with EQUIVALENCE   : {n_files}")
+    logger.info(f"Units with EQUIVALENCE   : {n_units}")
+    logger.info(f"Aliasing groups          : {total_n_groups}")
+    logger.info(f"Variables in groups      : {len(rows)}")
+    logger.success("Generated:")
+    logger.success(f"  {output_file}")
 
 
 # =============================================================================
@@ -289,7 +290,7 @@ def _write_csv(filepath: Path, rows: list, columns: list):
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"  → {filepath.name}  ({len(rows)} rows)")
+    logger.debug(f"  → {filepath.name}  ({len(rows)} rows)")
 
 
 # =============================================================================

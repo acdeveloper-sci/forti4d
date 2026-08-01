@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -232,7 +234,7 @@ def extract_types(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes. Returns None for both outputs when
     there's nothing to process (same as the original — no file is written)."""
     inputs = inputs or {}
-    print("--- Derived Types Extraction ---")
+    logger.debug("--- Derived Types Extraction ---")
 
     # 1. Inventory
     try:
@@ -240,11 +242,11 @@ def extract_types(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"type_definitions": None, "type_components": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"type_definitions": None, "type_components": None}
 
     units_map = defaultdict(list)
@@ -357,12 +359,11 @@ def write_types(results_dir, data: dict) -> None:
     _write_csv(results_dir / "type_definitions.csv", rows_types, TYPES_COLS)
     _write_csv(results_dir / "type_components.csv", rows_comps, COMPS_COLS)
 
-    print(f"Derived types           : {len(rows_types)}")
-    print(f"Total components        : {len(rows_comps)}")
-    print()
-    print("Generated:")
-    print(f"  {results_dir / 'type_definitions.csv'}")
-    print(f"  {results_dir / 'type_components.csv'}")
+    logger.info(f"Derived types           : {len(rows_types)}")
+    logger.info(f"Total components        : {len(rows_comps)}")
+    logger.success("Generated:")
+    logger.success(f"  {results_dir / 'type_definitions.csv'}")
+    logger.success(f"  {results_dir / 'type_components.csv'}")
 
 
 # =============================================================================
@@ -375,7 +376,7 @@ def _write_csv(path: Path, rows: list, columns: list):
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"  → {path.name}  ({len(rows)} rows)")
+    logger.debug(f"  → {path.name}  ({len(rows)} rows)")
 
 
 # =============================================================================

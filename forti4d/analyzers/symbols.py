@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
 
@@ -526,7 +528,7 @@ def extract_symbols(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes. Returns None for all 3 outputs when
     there's nothing to process (same as the original — no file is written)."""
     inputs = inputs or {}
-    print("--- Symbol Extraction ---")
+    logger.debug("--- Symbol Extraction ---")
 
     # 1. Inventory
     try:
@@ -534,11 +536,11 @@ def extract_symbols(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"symbol_variables": None, "symbol_signatures": None, "symbol_implicit": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"symbol_variables": None, "symbol_signatures": None, "symbol_implicit": None}
 
     # Group units by file, ensuring int types
@@ -645,15 +647,14 @@ def write_symbols(results_dir, data: dict) -> None:
     # 5. Console summary
     n_impl_none = sum(1 for f in rows_implicit if f["Is_None"] == "YES")
 
-    print(f"Variables / constants   : {len(rows_vars)}")
-    print(f"Formal arguments        : {len(rows_signatures)}")
-    print(f"IMPLICIT statements     : {len(rows_implicit)}  ({n_impl_none} IMPLICIT NONE)")
-    print(f"Units with COMMON map   : {data['common_units_count']}")
-    print()
-    print(f"Generated:")
-    print(f"  {results_dir / 'symbol_variables.csv'}")
-    print(f"  {results_dir / 'symbol_signatures.csv'}")
-    print(f"  {results_dir / 'symbol_implicit.csv'}")
+    logger.info(f"Variables / constants   : {len(rows_vars)}")
+    logger.info(f"Formal arguments        : {len(rows_signatures)}")
+    logger.info(f"IMPLICIT statements     : {len(rows_implicit)}  ({n_impl_none} IMPLICIT NONE)")
+    logger.info(f"Units with COMMON map   : {data['common_units_count']}")
+    logger.success("Generated:")
+    logger.success(f"  {results_dir / 'symbol_variables.csv'}")
+    logger.success(f"  {results_dir / 'symbol_signatures.csv'}")
+    logger.success(f"  {results_dir / 'symbol_implicit.csv'}")
 
 
 # =============================================================================
@@ -666,7 +667,7 @@ def _write_csv(path: Path, rows: list, columns: list):
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"  → {path.name}  ({len(rows)} rows)")
+    logger.debug(f"  → {path.name}  ({len(rows)} rows)")
 
 
 # =============================================================================

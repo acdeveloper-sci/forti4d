@@ -2,6 +2,8 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
+
 import forti4d.lib.reader_logical as reader_logical
 from forti4d.analyzers.inventory import load_inventory
 from forti4d import config
@@ -54,7 +56,7 @@ def analize_sloc(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes. Returns None for report_sloc when
     there's nothing to process (same as the original — no file is written)."""
     inputs = inputs or {}
-    print("--- Precise SLOC Counter ---")
+    logger.debug("--- Precise SLOC Counter ---")
 
     # 1. Load inventory
     try:
@@ -62,11 +64,11 @@ def analize_sloc(source_dir, results_dir, *, inputs=None) -> dict:
             rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
         )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
+        logger.warning(f"ERROR loading inventory: {e}")
         return {"report_sloc": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
+        logger.warning("Inventory is empty.")
         return {"report_sloc": None}
 
     # Convert numeric types and group by file
@@ -89,12 +91,12 @@ def analize_sloc(source_dir, results_dir, *, inputs=None) -> dict:
     for idx, rel_path in enumerate(sorted_files):
         file_name = Path(rel_path).name
         physical_path = source_dir / rel_path
-        print(f"  [{idx+1}/{len(sorted_files)}] {file_name}")
+        logger.debug(f"  [{idx+1}/{len(sorted_files)}] {file_name}")
 
         try:
             sentences = reader_logical.read_logical_lines(physical_path)
         except Exception as e:
-            print(f"    -> Error reading: {e}")
+            logger.warning(f"    -> Error reading: {e}")
             continue
 
         # Classify physical lines
@@ -147,7 +149,7 @@ def analize_sloc(source_dir, results_dir, *, inputs=None) -> dict:
             )
 
     if not output_data:
-        print("No data to export.")
+        logger.warning("No data to export.")
         return {"report_sloc": None}
 
     # Sort by descending SLOC_net
@@ -195,31 +197,30 @@ def write_sloc(results_dir, data: dict) -> None:
     for r in output_data:
         files_loc[r["File"]] += r["LOC"]
 
-    print(f"\nGlobal summary:")
-    print(f"  Total LOC (physical, corpus) : {sum(files_loc.values()):>8,}")
-    print(f"  Blank lines                  : {total_blank:>8,}")
-    print(f"  Comment lines                : {total_comment:>8,}")
-    print(f"  Continuation lines           : {total_cont:>8,}")
-    print(f"  Physical SLOC                : {total_sloc_physycal:>8,}  (code without blanks/comments)")
-    print(f"  Net SLOC                     : {total_sloc_net:>8,}  (logical statements)")
+    logger.info("Global summary:")
+    logger.info(f"  Total LOC (physical, corpus) : {sum(files_loc.values()):>8,}")
+    logger.info(f"  Blank lines                  : {total_blank:>8,}")
+    logger.info(f"  Comment lines                : {total_comment:>8,}")
+    logger.info(f"  Continuation lines           : {total_cont:>8,}")
+    logger.info(f"  Physical SLOC                : {total_sloc_physycal:>8,}  (code without blanks/comments)")
+    logger.info(f"  Net SLOC                     : {total_sloc_net:>8,}  (logical statements)")
 
     loc_corpus = sum(files_loc.values())
     if loc_corpus > 0:
-        print(f"  Comment density (corpus)     : {total_comment/loc_corpus*100:>7.1f}%")
+        logger.info(f"  Comment density (corpus)     : {total_comment/loc_corpus*100:>7.1f}%")
 
-    print(f"\nTop 10 largest units (net SLOC):")
+    logger.info("Top 10 largest units (net SLOC):")
     for r in output_data[:10]:
-        pct = f"{r['Pct_Comment']:4.1f}%"
-        print(f"  {r['SLOC_net']:5}  sloc  {r['Pct_Comment']:4.1f}% comment  " f"{r['File']:25} {r['Unit']}")
+        logger.info(f"  {r['SLOC_net']:5}  sloc  {r['Pct_Comment']:4.1f}% comment  " f"{r['File']:25} {r['Unit']}")
 
     # Units with no comments at all
     no_comments = [r for r in output_data if r["N_Comments"] == 0 and r["SLOC_net"] > 10]
     if no_comments:
-        print(f"\nUnits with >10 statements and 0 comments ({len(no_comments)}):")
+        logger.info(f"Units with >10 statements and 0 comments ({len(no_comments)}):")
         for r in sorted(no_comments, key=lambda x: -x["SLOC_net"])[:15]:
-            print(f"  {r['SLOC_net']:5}  sloc  {r['File']:25} {r['Unit']}")
+            logger.info(f"  {r['SLOC_net']:5}  sloc  {r['File']:25} {r['Unit']}")
 
-    print(f"\nGenerated: {output_file}")
+    logger.success(f"Generated: {output_file}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

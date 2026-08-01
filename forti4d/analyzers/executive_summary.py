@@ -5,6 +5,7 @@ import csv
 from pathlib import Path
 from collections import Counter, defaultdict
 from statistics import mean, median
+from loguru import logger
 from forti4d import config
 
 
@@ -14,7 +15,7 @@ def load_data(rows=None, dep_rows=None, results_dir=None):
     if rows is None:
         inventory_file = Path(results_dir) / "inventory_report.csv"
         if not inventory_file.exists():
-            print(f"ERROR: {inventory_file} not found")
+            logger.error(f"ERROR: {inventory_file} not found")
             sys.exit(1)
         # utf-8-sig to correctly read accented characters if coming from Excel
         with open(inventory_file, "r", encoding="utf-8-sig") as f:
@@ -353,7 +354,7 @@ def generate_csv_rows(stats) -> list:
 def analyze_executive_summary(source_dir, results_dir, *, inputs=None) -> dict:
     """Pure computation. No disk writes."""
     inputs = inputs or {}
-    print("Generating Executive Summary...")
+    logger.info("Generating Executive Summary...")
     inv, dep = load_data(
         rows=inputs.get("inventory_report"), dep_rows=inputs.get("dep_03_impact_matrix"), results_dir=results_dir
     )
@@ -370,7 +371,7 @@ def analyze_executive_summary(source_dir, results_dir, *, inputs=None) -> dict:
     )
     scope_stats = calculate_scope_stats(inv, impl_none_set, equiv_set, common_set, vars_count)
     if scope_stats:
-        print(
+        logger.info(
             f"  E4: {scope_stats['n_impl_none']}/{scope_stats['total']} IMPLICIT NONE, "
             f"{scope_stats['n_equiv']} EQUIV, {scope_stats['n_common']} COMMON, "
             f"{scope_stats['n_clean']} clean-scope"
@@ -388,14 +389,14 @@ def write_executive_summary(results_dir, data: dict) -> None:
     # utf-8-sig to generate MD report compatible with Windows
     with open(out_md, "w", encoding="utf-8-sig") as f:
         f.write(data["project_summary_md"])
-    print(f"Executive report generated: {out_md}")
+    logger.success(f"Executive report generated: {out_md}")
 
     out_csv = Path(results_dir) / "file_statistics.csv"
     with open(out_csv, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(["File", "Total_Lines", "Total_Units", "Has_Legacy", "Has_IO", "Types_Present"])
         writer.writerows(data["file_statistics"])
-    print(f"Detailed CSV generated: {out_csv}")
+    logger.success(f"Detailed CSV generated: {out_csv}")
 
 
 def main(source_dir=None, results_dir=None, *, inputs=None):

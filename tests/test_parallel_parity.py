@@ -32,10 +32,10 @@ def test_parallel_matches_sequential_scoped(tmp_path):
     seq_dir, par_dir = tmp_path / "seq", tmp_path / "par"
 
     seq = forti4d.run_pipeline(
-        source_dir=FIXTURES_DIR, results_dir=seq_dir, only=["inventory", "profiler", "blocks"], workers=1, quiet=True
+        source_dir=FIXTURES_DIR, results_dir=seq_dir, only=["inventory", "profiler", "blocks"], workers=1
     )
     par = forti4d.run_pipeline(
-        source_dir=FIXTURES_DIR, results_dir=par_dir, only=["inventory", "profiler", "blocks"], workers=2, quiet=True
+        source_dir=FIXTURES_DIR, results_dir=par_dir, only=["inventory", "profiler", "blocks"], workers=2
     )
     assert all(success for _, success, _, _ in seq.steps), seq.steps
     assert all(success for _, success, _, _ in par.steps), par.steps
@@ -46,8 +46,8 @@ def test_parallel_matches_sequential_scoped(tmp_path):
 def test_parallel_matches_sequential_full_pipeline(tmp_path):
     seq_dir, par_dir = tmp_path / "seq", tmp_path / "par"
 
-    seq = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=seq_dir, workers=1, quiet=True)
-    par = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=par_dir, workers=2, quiet=True)
+    seq = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=seq_dir, workers=1)
+    par = forti4d.run_pipeline(source_dir=FIXTURES_DIR, results_dir=par_dir, workers=2)
     assert all(success for _, success, _, _ in seq.steps), seq.steps
     assert all(success for _, success, _, _ in par.steps), par.steps
 
