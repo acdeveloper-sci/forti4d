@@ -4,12 +4,7 @@ from pathlib import Path
 
 import forti4d.lib.reader_logical as reader_logical
 from forti4d.analyzers.inventory import load_inventory
-from forti4d.config import CODE_PATH, RESULTS_PATH
-
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-CSV_OUTPUT = RESULTS_PATH / "report_sloc.csv"
+from forti4d import config
 
 
 # =============================================================================
@@ -55,19 +50,24 @@ def classify_physical(sentences: list) -> dict:
 # =============================================================================
 
 
-def analize_sloc():
+def analize_sloc(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for report_sloc when
+    there's nothing to process (same as the original — no file is written)."""
+    inputs = inputs or {}
     print("--- Precise SLOC Counter ---")
 
     # 1. Load inventory
     try:
-        inventory_list = load_inventory()
+        inventory_list = load_inventory(
+            rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+        )
     except Exception as e:
         print(f"ERROR loading inventory: {e}")
-        return
+        return {"report_sloc": None}
 
     if not inventory_list:
         print("Inventory is empty.")
-        return
+        return {"report_sloc": None}
 
     # Convert numeric types and group by file
     units_map = defaultdict(list)
@@ -83,13 +83,12 @@ def analize_sloc():
             u["End_Line"] = 0
         units_map[rel].append(u)
 
-    code_path_ = CODE_PATH
     sorted_files = sorted(units_map.keys(), key=str.lower)
     output_data = []
 
     for idx, rel_path in enumerate(sorted_files):
         file_name = Path(rel_path).name
-        physical_path = code_path_ / rel_path
+        physical_path = source_dir / rel_path
         print(f"  [{idx+1}/{len(sorted_files)}] {file_name}")
 
         try:
@@ -149,12 +148,20 @@ def analize_sloc():
 
     if not output_data:
         print("No data to export.")
-        return
+        return {"report_sloc": None}
 
     # Sort by descending SLOC_net
     output_data.sort(key=lambda x: -x["SLOC_net"])
 
-    # Export
+    return {"report_sloc": output_data}
+
+
+def write_sloc(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    output_data = data["report_sloc"]
+    if output_data is None:
+        return  # nothing to process — nothing written at all, same as before
+
     columns = [
         "File",
         "Unit",
@@ -167,7 +174,8 @@ def analize_sloc():
         "SLOC_net",
         "Pct_Comment",
     ]
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+    output_file = Path(results_dir) / "report_sloc.csv"
+    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
         w.writerows(output_data)
@@ -211,8 +219,16 @@ def analize_sloc():
         for r in sorted(no_comments, key=lambda x: -x["SLOC_net"])[:15]:
             print(f"  {r['SLOC_net']:5}  sloc  {r['File']:25} {r['Unit']}")
 
-    print(f"\nGenerated: {CSV_OUTPUT}")
+    print(f"\nGenerated: {output_file}")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analize_sloc(source_dir, results_dir, inputs=inputs)
+    write_sloc(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":
-    analize_sloc()
+    main()

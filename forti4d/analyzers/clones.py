@@ -17,13 +17,7 @@ from pathlib import Path
 
 from forti4d.analyzers.inventory import load_inventory
 from forti4d.lib.reader_logical import read_logical_lines
-from forti4d.config import CODE_PATH, RESULTS_PATH
-
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-AMBIGUITIES_PATH = RESULTS_PATH / "dep_00_ambiguities.csv"
-CSV_OUTPUT = RESULTS_PATH / "report_clones.csv"
+from forti4d import config
 
 # Umbral de similitud: >= este valor → SIMILAR; == 1.0 → IDENTICO
 SIMILAR_THRESHOLD = 0.80
@@ -90,14 +84,22 @@ def classify(ratio: float) -> str:
 # =============================================================================
 
 
-def main():
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
+def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for report_clones when
+    the inventory is empty (same as the original — no file is written in
+    that case, a known inconsistency not fixed in this migration); an empty
+    list when there are no ambiguities/duplicates (headers-only file is
+    still written in that case, same as the original)."""
+    inputs = inputs or {}
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
 
     # Load inventory
-    inventory_list = load_inventory()
+    inventory_list = load_inventory(
+        rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+    )
     if not inventory_list:
         print("ERROR: inventory is empty. Run inventory.py first.")
-        return
+        return {"report_clones": None}
 
     # Index: (file_basename, name_upper) → {type, start, end}
     inv_idx = {}
@@ -110,27 +112,29 @@ def main():
         }
 
     # Load ambiguities — absence means no duplicate names in the corpus (not an error)
-    if not AMBIGUITIES_PATH.exists():
-        print("No ambiguous unit names found — skipping clone comparison.")
-        _write_empty_csv()
-        return
+    ambiguities_rows = inputs.get("dep_00_ambiguities")
+    if ambiguities_rows is None:
+        ambiguities_path = Path(results_dir) / "dep_00_ambiguities.csv"
+        if not ambiguities_path.exists():
+            print("No ambiguous unit names found — skipping clone comparison.")
+            return {"report_clones": []}
+        with open(ambiguities_path, encoding="utf-8-sig") as f:
+            ambiguities_rows = list(csv.DictReader(f))
 
     groups = []  # [(name, utype, [file1, file2, ...])]
-    with open(AMBIGUITIES_PATH, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            name = row["Unit_Name"].strip().upper()
-            utype = row["Type"].strip()
-            files = [a.strip() for a in row["File_List"].split(";") if a.strip()]
-            if len(files) >= 2:
-                groups.append((name, utype, files))
+    for row in ambiguities_rows:
+        name = row["Unit_Name"].strip().upper()
+        utype = row["Type"].strip()
+        files = [a.strip() for a in row["File_List"].split(";") if a.strip()]
+        if len(files) >= 2:
+            groups.append((name, utype, files))
 
     if not groups:
         print("No duplicate units found.")
-        _write_empty_csv()
-        return
+        return {"report_clones": []}
 
     # Build file path index
-    file_idx = build_file_index(CODE_PATH)
+    file_idx = build_file_index(source_dir)
 
     # Pairwise comparisons
     rows = []
@@ -173,8 +177,24 @@ def main():
     _order = {"DIVERGED": 0, "SIMILAR": 1, "IDENTICAL": 2}
     rows.sort(key=lambda r: (_order[r["Status"]], r["Unit"]))
 
+    return {"report_clones": rows, "n_groups": len(groups)}
+
+
+def write_clones(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    rows = data["report_clones"]
     columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+
+    if rows is None:
+        return  # inventory empty — nothing written at all, same as before
+
+    output_file = Path(results_dir) / "report_clones.csv"
+
+    if not rows:
+        _write_empty_csv(output_file, columns)
+        return
+
+    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
         w.writerows(rows)
@@ -183,17 +203,24 @@ def main():
     n_sim = sum(1 for r in rows if r["Status"] == "SIMILAR")
     n_div = sum(1 for r in rows if r["Status"] == "DIVERGED")
 
-    print(f"\n{len(rows)} pairs compared  ({len(groups)} units with duplicates)")
+    print(f"\n{len(rows)} pairs compared  ({data['n_groups']} units with duplicates)")
     print(f"  IDENTICAL : {n_id}")
     print(f"  SIMILAR   : {n_sim}")
     print(f"  DIVERGED  : {n_div}")
-    print(f"\nGenerated: {CSV_OUTPUT}")
+    print(f"\nGenerated: {output_file}")
 
 
-def _write_empty_csv():
-    columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+def _write_empty_csv(path, columns):
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
         csv.DictWriter(f, fieldnames=columns).writeheader()
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_clones(source_dir, results_dir, inputs=inputs)
+    write_clones(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

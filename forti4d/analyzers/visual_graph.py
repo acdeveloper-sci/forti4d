@@ -73,22 +73,32 @@ SHAPE_DEFAULT = "box"
 # =============================================================================
 
 
-def load_consolidated() -> dict:
-    """dict: name.upper() -> consolidated row."""
-    if not CONSOL_PATH.exists():
-        return {}
+def load_consolidated(rows=None, results_dir=None) -> dict:
+    """dict: name.upper() -> consolidated row. Uses in-memory `rows` if
+    given, otherwise reads report_consolidated.csv from results_dir (or the
+    frozen RESULTS_PATH default, for backward-compatible standalone use)."""
+    if rows is None:
+        consol_path = Path(results_dir) / "report_consolidated.csv" if results_dir is not None else CONSOL_PATH
+        if not consol_path.exists():
+            return {}
+        with open(consol_path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
     meta = {}
-    with open(CONSOL_PATH, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            n = row.get("Unit", "").strip()
-            if n:
-                meta[n.upper()] = row
+    for row in rows:
+        n = row.get("Unit", "").strip()
+        if n:
+            meta[n.upper()] = row
     return meta
 
 
-def load_raw_graph() -> list:
-    """Returns rows from dep_02_unit_graph.csv."""
-    with open(GRAPH_CSV, encoding="utf-8-sig") as f:
+def load_raw_graph(rows=None, results_dir=None) -> list:
+    """Returns rows of the unit call graph. Uses in-memory `rows` if given,
+    otherwise reads dep_02_unit_graph.csv from results_dir (or the frozen
+    GRAPH_CSV default, for backward-compatible standalone use)."""
+    if rows is not None:
+        return rows
+    graph_csv = Path(results_dir) / "dep_02_unit_graph.csv" if results_dir is not None else GRAPH_CSV
+    with open(graph_csv, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 
@@ -306,9 +316,13 @@ def generate_dot(
             fillcolor, fontcolor = node_color(n, meta, node_eps, colors_ep, entry_names_sel)
 
             parts = [n]
-            if cc:
+            # Compare to "" rather than plain truthiness: when meta comes
+            # from disk, these are always strings ("0" is truthy); when it
+            # comes in-memory from consolidate.py, they're native ints (0 is
+            # falsy). "!= ''" treats a real zero the same way in both cases.
+            if cc != "":
                 parts.append(f"CC={cc}")
-            if fan_in:
+            if fan_in != "":
                 parts.append(f"Fi={fan_in}")
             label = r"\n".join(parts)
             tooltip = f"{type_} | {file}" if type_ else file
@@ -328,6 +342,96 @@ def generate_dot(
 
     lines.append("}")
     return "\n".join(lines)
+
+
+# =============================================================================
+# LIBRARY / PIPELINE ENTRY POINT
+# =============================================================================
+
+
+def run(source_dir, results_dir, *, inputs=None) -> dict:
+    """
+    Pure computation, registered as the pipeline step instead of `main()`.
+    Reproduces the "no --entry" (full graph) branch of `main()` below —
+    the only one the pipeline exercises — reusing the same functions as
+    the CLI, without duplicating logic. `main()`'s argparse-based CLI
+    (--entry/--list/--use) is untouched and still available standalone.
+    """
+    inputs = inputs or {}
+    results_dir = Path(results_dir)
+
+    graph_csv = results_dir / "dep_02_unit_graph.csv"
+    if inputs.get("dep_02_unit_graph") is None and not graph_csv.exists():
+        print(f"ERROR: Not found {graph_csv}")
+        return {"graph_complete_dot": None, "graph_simple_dot": None}
+
+    meta = load_consolidated(rows=inputs.get("report_consolidated"), results_dir=results_dir)
+    raw_edges = load_raw_graph(rows=inputs.get("dep_02_unit_graph"), results_dir=results_dir)
+    edges_am = build_friendly_graph(raw_edges, meta)
+    available_eps = available_entry_points(meta)
+
+    n_call = sum(1 for e in raw_edges if e["Dep_Type"] == "CALL")
+    n_func = sum(1 for e in raw_edges if e["Dep_Type"] == "FUNC_CALL")
+    n_use = sum(1 for e in raw_edges if e["Dep_Type"] == "USE")
+    print(f"Graph: {len(meta)} nodes  |  {n_call} CALL  {n_func} FUNC_CALL  {n_use} USE")
+
+    node_eps = calculate_scope(available_eps, edges_am)
+    colors_ep = assign_colors_ep(available_eps)
+
+    # Complete graph: all nodes of the consolidated
+    all_nodes = set(row["Unit"] for row in meta.values())
+
+    dot_full = generate_dot(
+        edges_am,
+        meta,
+        allowed_nodes=all_nodes,
+        node_eps=node_eps,
+        colors_ep=colors_ep,
+        entry_names_sel=available_eps,
+        include_use=True,
+        title="CallGraph_Complete",
+    )
+
+    # Simple graph: only reachable, no USE
+    achievable = {n for n, eps in node_eps.items() if eps} | set(available_eps)
+
+    dot_simple = generate_dot(
+        edges_am,
+        meta,
+        allowed_nodes=achievable,
+        node_eps=node_eps,
+        colors_ep=colors_ep,
+        entry_names_sel=available_eps,
+        include_use=False,
+        title="CallGraph_Simple",
+    )
+
+    return {"graph_complete_dot": dot_full, "graph_simple_dot": dot_simple}
+
+
+def write_graphs(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    dot_full = data["graph_complete_dot"]
+    if dot_full is None:
+        return
+
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    (results_dir / "graph_complete.dot").write_text(dot_full, encoding="utf-8")
+    print(f"Generated:{results_dir / 'graph_complete.dot'}")
+
+    (results_dir / "graph_simple.dot").write_text(data["graph_simple_dot"], encoding="utf-8")
+    print(f"Generated:{results_dir / 'graph_simple.dot'}")
+
+    print()
+    print("Torender:")
+    print("  dot -Tpng  graph_simple.dot   -o graph_simple.png")
+    print("  dot -Tsvg  graph_complete.dot -o graph_complete.svg")
+    print()
+    print("For a specific executable:")
+    print("  python visual_graph.py --list")
+    print("  python visual_graph.py --entry mcdes")
 
 
 # =============================================================================

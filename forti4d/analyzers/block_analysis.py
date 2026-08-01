@@ -1,13 +1,17 @@
 import csv
+import io
 import sys
 import os
 from collections import Counter, defaultdict
+from contextlib import redirect_stdout
+
+from forti4d import config
 
 try:
     from forti4d.analyzers.inventory import load_inventory
 except ImportError:
 
-    def load_inventory():
+    def load_inventory(rows=None, csv_path=None):
         return []
 
 
@@ -244,13 +248,29 @@ def print_blocks(blocks, indent_base=""):
 # =============================================================================
 
 
-def main(debug_file):
+def analyze_blocks_file(debug_file, results_dir=None):
+    """
+    Computes the structural block report for one *_DEBUG.csv file.
+    Returns the exact report text (same as what used to go straight to
+    stdout), or None if debug_file doesn't exist. Captures the original
+    print-based traversal via stdout redirection rather than reimplementing
+    its formatting as string-building — guarantees byte-identical output
+    with minimal risk of subtle newline/spacing differences.
+    """
     if not os.path.exists(debug_file):
-        return
+        return None
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        _print_report(debug_file, results_dir)
+    return buf.getvalue()
+
+
+def _print_report(debug_file, results_dir=None):
     source_name = os.path.basename(debug_file).replace("_DEBUG.csv", "")
 
     # 1. Load metadata
-    inv = load_inventory()
+    _, resolved_results_dir = config.resolve_paths(results=results_dir)
+    inv = load_inventory(csv_path=resolved_results_dir / "inventory_report.csv")
     units_map = {u["Name"]: u for u in inv if u["File"].lower() == source_name.lower()}
 
     # 2. Load raw lines
@@ -331,6 +351,13 @@ def main(debug_file):
 
     for r in roots:
         _report(r["Name"])
+
+
+def main(debug_file, results_dir=None):
+    """CLI standalone entry point — prints the report to stdout, same as before."""
+    report = analyze_blocks_file(debug_file, results_dir=results_dir)
+    if report is not None:
+        sys.stdout.write(report)
 
 
 if __name__ == "__main__":

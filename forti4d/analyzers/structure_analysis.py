@@ -2,73 +2,82 @@ import sys
 import os
 import csv
 from collections import defaultdict
-from forti4d.config import RESULTS_PATH
+from pathlib import Path
+from forti4d import config
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-IMPACT_FILE = RESULTS_PATH / "dep_03_impact_matrix.csv"
-INVENTORY_FILE = RESULTS_PATH / "inventory_report.csv"
-OUTPUT_FILE = RESULTS_PATH / "report_structure_analysis.csv"
 
 # How many incoming calls make a unit "CRITICAL"?
 CRITICAL_THRESHOLD = 10
 
+CATEGORY_PRIORITY = {"CRITICAL_NODE": 1, "ORCHESTRATOR": 2, "ENTRY_POINT": 3, "MIXED": 4, "WORKER": 5, "ISLAND": 6}
 
-def load_matrix():
-    if not IMPACT_FILE.exists():
-        print(f"ERROR: '{IMPACT_FILE}' does not exist. Run dependencies.py first.")
-        sys.exit(1)
+
+def load_matrix(rows=None, results_dir=None):
+    """Groups impact-matrix rows per file. Uses in-memory `rows` if given
+    (in-process pipeline); otherwise reads dep_03_impact_matrix.csv from
+    results_dir — the standalone path."""
+    if rows is None:
+        impact_file = Path(results_dir) / "dep_03_impact_matrix.csv"
+        if not impact_file.exists():
+            print(f"ERROR: '{impact_file}' does not exist. Run dependencies.py first.")
+            sys.exit(1)
+        print(f"Reading {impact_file}...")
+        with open(impact_file, "r", encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
 
     data_per_file = defaultdict(list)
 
-    print(f"Reading {IMPACT_FILE}...")
-    with open(IMPACT_FILE, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            file = row.get("File", "N/A").strip()
+    for row in rows:
+        file = row.get("File", "N/A").strip()
 
-            # Filter out invalid or multi-file entries
-            if file in ("N/A", "EXTERNAL/LOCAL", "MULTIPLE_CANDIDATES") or ";" in file:
-                continue
+        # Filter out invalid or multi-file entries
+        if file in ("N/A", "EXTERNAL/LOCAL", "MULTIPLE_CANDIDATES") or ";" in file:
+            continue
 
-            try:
-                fan_in = int(row.get("Fan_In", 0))
-                fan_out = int(row.get("Fan_Out", 0))
-            except ValueError:
-                continue
+        try:
+            fan_in = int(row.get("Fan_In", 0))
+            fan_out = int(row.get("Fan_Out", 0))
+        except ValueError:
+            continue
 
-            data_per_file[file].append(
-                {
-                    "Unit": row.get("Unit", "UNKNOWN"),
-                    "Type": row.get("Type", "UNKNOWN").upper(),
-                    "Fan_In": fan_in,
-                    "Fan_Out": fan_out,
-                }
-            )
+        data_per_file[file].append(
+            {
+                "Unit": row.get("Unit", "UNKNOWN"),
+                "Type": row.get("Type", "UNKNOWN").upper(),
+                "Fan_In": fan_in,
+                "Fan_Out": fan_out,
+            }
+        )
 
     return data_per_file
 
 
-def load_inventory_files():
+def load_inventory_files(rows=None, results_dir=None):
     """
     Returns the set of all known files and whether they contain
-    any IMPLICIT-MAIN unit (for later categorization).
+    any IMPLICIT-MAIN unit (for later categorization). Uses in-memory
+    `rows` if given, otherwise reads inventory_report.csv from results_dir.
     """
     known_files = set()
     files_with_implicit_main = set()
 
-    if not INVENTORY_FILE.exists():
-        print(f"Warning: '{INVENTORY_FILE}' does not exist. ISLANDs will not be detected.")
-        return known_files, files_with_implicit_main
+    if rows is None:
+        inventory_file = Path(results_dir) / "inventory_report.csv"
+        if not inventory_file.exists():
+            print(f"Warning: '{inventory_file}' does not exist. ISLANDs will not be detected.")
+            return known_files, files_with_implicit_main
+        with open(inventory_file, "r", encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
 
-    with open(INVENTORY_FILE, "r", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            file = row.get("File", "").strip()
-            if file:
-                known_files.add(file)
-                if row.get("Type", "").upper() == "IMPLICIT-MAIN":
-                    files_with_implicit_main.add(file)
+    for row in rows:
+        file = row.get("File", "").strip()
+        if file:
+            known_files.add(file)
+            if row.get("Type", "").upper() == "IMPLICIT-MAIN":
+                files_with_implicit_main.add(file)
 
     return known_files, files_with_implicit_main
 
@@ -156,15 +165,21 @@ def classify_file(file_name, units, has_implicit_main):
     }
 
 
-def main():
+def analyze_structure(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for
+    report_structure_analysis when there's nothing to process (same as the
+    original — no file is written in that case either)."""
+    inputs = inputs or {}
     print(f"--- Architecture Analysis (Threshold: {CRITICAL_THRESHOLD}) ---")
 
-    data = load_matrix()
-    known_files, files_with_implicit_main = load_inventory_files()
+    data = load_matrix(rows=inputs.get("dep_03_impact_matrix"), results_dir=results_dir)
+    known_files, files_with_implicit_main = load_inventory_files(
+        rows=inputs.get("inventory_report"), results_dir=results_dir
+    )
 
     if not data and not known_files:
         print("No data found to process.")
-        return
+        return {"report_structure_analysis": None, "category_counts": {}}
 
     results = []
     counts = defaultdict(int)
@@ -195,8 +210,17 @@ def main():
         counts["ISLAND"] += 1
 
     # Hierarchical order for the report
-    priority = {"CRITICAL_NODE": 1, "ORCHESTRATOR": 2, "ENTRY_POINT": 3, "MIXED": 4, "WORKER": 5, "ISLAND": 6}
-    results.sort(key=lambda x: priority.get(x["Category"], 99))
+    results.sort(key=lambda x: CATEGORY_PRIORITY.get(x["Category"], 99))
+
+    return {"report_structure_analysis": results, "category_counts": dict(counts)}
+
+
+def write_structure(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step. No file is written when
+    there was nothing to process (same as the original)."""
+    results = data["report_structure_analysis"]
+    if results is None:
+        return
 
     columns = [
         "File",
@@ -209,22 +233,32 @@ def main():
         "Has_Main",
         "Detail",
     ]
+    output_file = Path(results_dir) / "report_structure_analysis.csv"
 
     try:
-        with open(OUTPUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
+        with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=columns)
             writer.writeheader()
             writer.writerows(results)
 
-        print(f"Report generated successfully: {OUTPUT_FILE}")
+        print(f"Report generated successfully: {output_file}")
         print("\nCategory Statistics:")
-        for cat in priority:
+        counts = data.get("category_counts", {})
+        for cat in CATEGORY_PRIORITY:
             count = counts.get(cat, 0)
             if count:
                 print(f"  - {cat:15}: {count}")
 
     except IOError as e:
         print(f"Error writing the report: {e}")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_structure(source_dir, results_dir, inputs=inputs)
+    write_structure(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

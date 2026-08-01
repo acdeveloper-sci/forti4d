@@ -20,15 +20,11 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-from forti4d.config import RESULTS_PATH
+from forti4d import config
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-CONSOL_PATH = RESULTS_PATH / "report_consolidated.csv"
-CLONES_PATH = RESULTS_PATH / "report_clones.csv"
-STRATEGY_PATH = RESULTS_PATH / "report_migration_strategy.csv"
-CSV_OUTPUT = RESULTS_PATH / "report_prioritization.csv"
 
 # Score weights (must sum to 1.0)
 W_CC = 0.30
@@ -99,52 +95,66 @@ def _order_priority(p: str) -> int:
 # =============================================================================
 
 
-def load_consolidated() -> list:
-    if not CONSOL_PATH.exists():
-        print(f"ERROR: {CONSOL_PATH} not found. Run consolidate.py first.")
+def load_consolidated(rows=None, results_dir=None) -> list:
+    """Uses in-memory `rows` if given, otherwise reads
+    report_consolidated.csv from results_dir."""
+    if rows is not None:
+        return rows
+    consol_path = Path(results_dir) / "report_consolidated.csv"
+    if not consol_path.exists():
+        print(f"ERROR: {consol_path} not found. Run consolidate.py first.")
         return []
-    with open(CONSOL_PATH, encoding="utf-8-sig") as f:
+    with open(consol_path, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 
-def load_strategy() -> dict:
-    """Returns dict: (file, unit_upper) → Strategy string."""
+def load_strategy(rows=None, results_dir=None) -> dict:
+    """Returns dict: (file, unit_upper) → Strategy string. Uses in-memory
+    `rows` if given, otherwise reads report_migration_strategy.csv."""
+    if rows is None:
+        strategy_path = Path(results_dir) / "report_migration_strategy.csv"
+        if not strategy_path.exists():
+            return {}
+        with open(strategy_path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+
     result = {}
-    if not STRATEGY_PATH.exists():
-        return result
-    with open(STRATEGY_PATH, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            a = row.get("File", "").strip()
-            u = row.get("Unit", "").strip().upper()
-            if a and u:
-                result[(a, u)] = row.get("Strategy", "").strip()
+    for row in rows:
+        a = row.get("File", "").strip()
+        u = row.get("Unit", "").strip().upper()
+        if a and u:
+            result[(a, u)] = row.get("Strategy", "").strip()
     return result
 
 
-def load_worst_state_clone() -> dict:
+def load_worst_state_clone(rows=None, results_dir=None) -> dict:
     """
     Returns dict: (file, unit_upper) → worst clone Estado for that unit.
-    A unit appears in clones as File_A or File_B.
+    A unit appears in clones as File_A or File_B. Uses in-memory `rows` if
+    given, otherwise reads report_clones.csv.
     """
     _rank = {"DIVERGED": 3, "SIMILAR": 2, "IDENTICAL": 1}
     worst = {}
 
-    if not CLONES_PATH.exists():
-        return worst
+    if rows is None:
+        clones_path = Path(results_dir) / "report_clones.csv"
+        if not clones_path.exists():
+            return worst
+        with open(clones_path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
 
-    with open(CLONES_PATH, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            name = row.get("Unit", "").strip().upper()
-            status = row.get("Status", "").strip()
-            file_a = row.get("File_A", "").strip()
-            file_b = row.get("File_B", "").strip()
+    for row in rows:
+        name = row.get("Unit", "").strip().upper()
+        status = row.get("Status", "").strip()
+        file_a = row.get("File_A", "").strip()
+        file_b = row.get("File_B", "").strip()
 
-            for file in (file_a, file_b):
-                key = (file, name)
-                rank_curr = _rank.get(worst.get(key, ""), 0)
-                rank_new = _rank.get(status, 0)
-                if rank_new > rank_curr:
-                    worst[key] = status
+        for file in (file_a, file_b):
+            key = (file, name)
+            rank_curr = _rank.get(worst.get(key, ""), 0)
+            rank_new = _rank.get(status, 0)
+            if rank_new > rank_curr:
+                worst[key] = status
 
     return worst
 
@@ -231,17 +241,29 @@ def calculate_scores(rows: list, clones: dict, strategy: dict) -> list:
 # =============================================================================
 
 
-def main():
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
+def analyze_prioritization(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for
+    report_prioritization when there's nothing to process (same as the
+    original — no file is written in that case)."""
+    inputs = inputs or {}
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
 
-    rows = load_consolidated()
+    rows = load_consolidated(rows=inputs.get("report_consolidated"), results_dir=results_dir)
     if not rows:
-        return
+        return {"report_prioritization": None}
 
-    clones = load_worst_state_clone()
-    strategy = load_strategy()
+    clones = load_worst_state_clone(rows=inputs.get("report_clones"), results_dir=results_dir)
+    strategy = load_strategy(rows=inputs.get("report_migration_strategy"), results_dir=results_dir)
 
     result = calculate_scores(rows, clones, strategy)
+    return {"report_prioritization": result}
+
+
+def write_prioritization(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    result = data["report_prioritization"]
+    if result is None:
+        return  # nothing to process — nothing written at all, same as before
 
     columns = [
         "Priority",
@@ -263,8 +285,9 @@ def main():
         "Score_Clon",
         "Score_E4",
     ]
+    output_file = Path(results_dir) / "report_prioritization.csv"
 
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
         w.writerows(result)
@@ -283,7 +306,15 @@ def main():
     print(f"\nTop 10:")
     for r in result[:10]:
         print(f"  [{r['Priority']:<9}] {r['Score']:>5}  {r['Unit']:<25} CC={r['CC']}  FanIn={r['Fan_In']}")
-    print(f"\nGenerated: {CSV_OUTPUT}")
+    print(f"\nGenerated: {output_file}")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_prioritization(source_dir, results_dir, inputs=inputs)
+    write_prioritization(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

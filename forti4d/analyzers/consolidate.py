@@ -24,26 +24,7 @@ import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
-from forti4d.config import RESULTS_PATH
-
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-INVENTORY_PATH = RESULTS_PATH / "inventory_report.csv"
-SLOC_PATH = RESULTS_PATH / "report_sloc.csv"
-COMPLEXITY_PATH = RESULTS_PATH / "report_complexity.csv"
-IMPACT_PATH = RESULTS_PATH / "dep_03_impact_matrix.csv"
-DENSITY_PATH = RESULTS_PATH / "report_density.csv"
-REACH_PATH = RESULTS_PATH / "report_reachability.csv"
-COMMONU_PATH = RESULTS_PATH / "common_usage.csv"
-SYMVALS_PATH = RESULTS_PATH / "symbol_variables.csv"
-SYMSIGN_PATH = RESULTS_PATH / "symbol_signatures.csv"
-SYMBIMP_PATH = RESULTS_PATH / "symbol_implicit.csv"
-TYPEDEF_PATH = RESULTS_PATH / "type_definitions.csv"
-EQUIVAL_PATH = RESULTS_PATH / "equivalences.csv"
-AUDIT_PATH = RESULTS_PATH / "audit"
-
-CSV_OUTPUT = RESULTS_PATH / "report_consolidated.csv"
+from forti4d import config
 
 
 # =============================================================================
@@ -51,38 +32,36 @@ CSV_OUTPUT = RESULTS_PATH / "report_consolidated.csv"
 # =============================================================================
 
 
-def read_csv(path: str, key_fn) -> dict:
-    """
-    Reads a CSV and returns a dict keyed by key_fn(row).
-    If the key repeats, the last row wins (merge behavior).
-    Returns {} if the file does not exist (optional source).
-    """
-    p = Path(path)
-    if not p.exists():
-        return {}
-    result = {}
-    with open(path, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            k = key_fn(row)
-            if k:
-                result[k] = row
-    return result
-
-
-def read_csv_multi(path: str, key_fn) -> dict:
-    """
-    Like read_csv but accumulates multiple rows per key into a list.
-    """
-    p = Path(path)
-    if not p.exists():
-        return {}
-    result = defaultdict(list)
-    with open(path, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
+def _index_rows(rows, key_fn, multi=False) -> dict:
+    if multi:
+        result = defaultdict(list)
+        for row in rows:
             k = key_fn(row)
             if k:
                 result[k].append(row)
-    return dict(result)
+        return dict(result)
+    result = {}
+    for row in rows:
+        k = key_fn(row)
+        if k:
+            result[k] = row
+    return result
+
+
+def read_source(rows, path: Path, key_fn, multi=False) -> dict:
+    """
+    Indexes `rows` by key_fn(row) if given (in-memory, from a prior step in
+    the same pipeline run); otherwise reads `path` from disk — the
+    standalone path, used when this step runs on its own with only its
+    inputs on disk. Returns {} if neither is available (optional source).
+    If the key repeats in single mode, the last row wins (merge behavior).
+    """
+    if rows is None:
+        if not path.exists():
+            return {}
+        with open(path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+    return _index_rows(rows, key_fn, multi=multi)
 
 
 def key_au(row: dict) -> tuple:
@@ -113,16 +92,20 @@ def safe_int(val, default=0):
 _AUDIT_KINDS = {"DATA_STMT", "ENTRY_STMT"}
 
 
-def count_stmts_audit(inv_raw: dict) -> dict:
+def count_stmts_audit(inv_raw: dict, results_dir: Path, audit_data: dict = None) -> dict:
     """
-    Iterates over audit/*_DEBUG.csv and counts DATA_STMT and ENTRY_STMT per unit.
-    Uses scope resolution identical to complexity.py: innermost unit
-    whose range [Start_Line, End_Line] contains the line.
+    Counts DATA_STMT and ENTRY_STMT per unit. Uses scope resolution
+    identical to complexity.py: innermost unit whose range
+    [Start_Line, End_Line] contains the line.
+
+    Uses in-memory `audit_data` ({rel_path: debug_rows}, from profiler.py)
+    if given; otherwise iterates over audit/*_DEBUG.csv under results_dir.
 
     Returns dict (File, Unit) → {"N_Data_Stmts": int, "N_Entry_Stmts": int}.
-    Returns {} if the audit/ directory does not exist.
+    Returns {} if there's no audit data available at all.
     """
-    if not AUDIT_PATH.exists():
+    audit_path = Path(results_dir) / "audit"
+    if audit_data is None and not audit_path.exists():
         return {}
 
     # Group units by Relative_Path (avoids basename collisions in subdirectories)
@@ -140,34 +123,38 @@ def count_stmts_audit(inv_raw: dict) -> dict:
 
     for rel_path, units in map_by_file.items():
         file_basename = Path(rel_path).name
-        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
-        debug_file = AUDIT_PATH / f"{debug_stem}_DEBUG.csv"
-        if not debug_file.exists():
-            continue
 
-        with open(debug_file, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                kind = row.get("Kind", "")
-                if kind not in _AUDIT_KINDS:
-                    continue
-                try:
-                    n_line = int(row["Line"])
-                except (ValueError, KeyError):
-                    continue
+        debug_rows = audit_data.get(rel_path) if audit_data is not None else None
+        if debug_rows is None:
+            debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+            debug_file = audit_path / f"{debug_stem}_DEBUG.csv"
+            if not debug_file.exists():
+                continue
+            with open(debug_file, encoding="utf-8-sig") as f:
+                debug_rows = list(csv.DictReader(f))
 
-                # Innermost unit containing n_line
-                candidates = [(li, lf, nom) for li, lf, nom in units if li <= n_line <= lf]
-                if not candidates:
-                    continue
-                _, _, name = max(candidates, key=lambda t: t[0])
+        for row in debug_rows:
+            kind = row.get("Kind", "")
+            if kind not in _AUDIT_KINDS:
+                continue
+            try:
+                n_line = int(row["Line"])
+            except (ValueError, KeyError):
+                continue
 
-                k = (file_basename, name)
-                if k not in counts:
-                    counts[k] = {"N_Data_Stmts": 0, "N_Entry_Stmts": 0}
-                if kind == "DATA_STMT":
-                    counts[k]["N_Data_Stmts"] += 1
-                else:
-                    counts[k]["N_Entry_Stmts"] += 1
+            # Innermost unit containing n_line
+            candidates = [(li, lf, nom) for li, lf, nom in units if li <= n_line <= lf]
+            if not candidates:
+                continue
+            _, _, name = max(candidates, key=lambda t: t[0])
+
+            k = (file_basename, name)
+            if k not in counts:
+                counts[k] = {"N_Data_Stmts": 0, "N_Entry_Stmts": 0}
+            if kind == "DATA_STMT":
+                counts[k]["N_Data_Stmts"] += 1
+            else:
+                counts[k]["N_Entry_Stmts"] += 1
 
     return counts
 
@@ -177,45 +164,46 @@ def count_stmts_audit(inv_raw: dict) -> dict:
 # =============================================================================
 
 
-def load_sources():
+def load_sources(results_dir, *, inputs=None):
     print("Loading sources...")
+    inputs = inputs or {}
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     # Inventory: key = (File, Name)  ← the inventory uses "Name"
+    inv_rows = inputs.get("inventory_report")
+    if inv_rows is None:
+        inventory_path = results_dir / "inventory_report.csv"
+        if not inventory_path.exists():
+            print(f"ERROR: {inventory_path} not found.")
+            sys.exit(1)
+        with open(inventory_path, encoding="utf-8-sig") as f:
+            inv_rows = list(csv.DictReader(f))
+
     inv_raw = {}
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
+    for row in inv_rows:
+        a = row.get("File", "").strip()
+        n = row.get("Name", "").strip()
+        if a and n:
+            inv_raw[(a, n)] = row
 
-    if not INVENTORY_PATH.exists():
-        print(f"ERROR: {INVENTORY_PATH} not found.")
-        sys.exit(1)
-    with open(INVENTORY_PATH, encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            a = row.get("File", "").strip()
-            n = row.get("Name", "").strip()
-            if a and n:
-                inv_raw[(a, n)] = row
+    sloc_data = read_source(inputs.get("report_sloc"), results_dir / "report_sloc.csv", key_au)
+    cc_data = read_source(inputs.get("report_complexity"), results_dir / "report_complexity.csv", key_au)
+    dens_data = read_source(inputs.get("report_density"), results_dir / "report_density.csv", key_au)
+    reach_data = read_source(inputs.get("report_reachability"), results_dir / "report_reachability.csv", key_au)
 
-    sloc_data = read_csv(SLOC_PATH, key_au)
-    cc_data = read_csv(COMPLEXITY_PATH, key_au)
-    dens_data = read_csv(DENSITY_PATH, key_au)
-    reach_data = read_csv(REACH_PATH, key_au)
-
-    # dep_03: key = (File, Unit) — columns in different order
-    imp_data = {}
-    if IMPACT_PATH.exists():
-        with open(IMPACT_PATH, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                a = row.get("File", "").strip()
-                u = row.get("Unit", "").strip()
-                if a and u:
-                    imp_data[(a, u)] = row
+    # dep_03: key = (File, Unit)
+    imp_data = read_source(inputs.get("dep_03_impact_matrix"), results_dir / "dep_03_impact_matrix.csv", key_au)
 
     # common_usage: multiple rows per unit (one per block)
-    common_multi = read_csv_multi(COMMONU_PATH, key_au)
+    common_multi = read_source(inputs.get("common_usage"), results_dir / "common_usage.csv", key_au, multi=True)
 
     # E4 symbols: multiple rows per unit
-    vars_multi = read_csv_multi(SYMVALS_PATH, key_au)
-    signat_multi = read_csv_multi(SYMSIGN_PATH, key_au)
-    implic_multi = read_csv_multi(SYMBIMP_PATH, key_au)
+    vars_multi = read_source(inputs.get("symbol_variables"), results_dir / "symbol_variables.csv", key_au, multi=True)
+    signat_multi = read_source(
+        inputs.get("symbol_signatures"), results_dir / "symbol_signatures.csv", key_au, multi=True
+    )
+    implic_multi = read_source(inputs.get("symbol_implicit"), results_dir / "symbol_implicit.csv", key_au, multi=True)
 
     # derived types: key = (File, host_unit)
     def key_type(row):
@@ -223,8 +211,8 @@ def load_sources():
         u = row.get("Unit", "").strip()
         return (a, u) if a and u else None
 
-    type_multi = read_csv_multi(TYPEDEF_PATH, key_type)
-    equiv_multi = read_csv_multi(EQUIVAL_PATH, key_au)
+    type_multi = read_source(inputs.get("type_definitions"), results_dir / "type_definitions.csv", key_type, multi=True)
+    equiv_multi = read_source(inputs.get("equivalences"), results_dir / "equivalences.csv", key_au, multi=True)
 
     print(f"  inventory    : {len(inv_raw)} units")
     print(f"  sloc         : {len(sloc_data)} entries")
@@ -238,7 +226,7 @@ def load_sources():
     print(f"  tipos_def    : {sum(len(v) for v in type_multi.values())} types in {len(type_multi)} units")
     print(f"  equivalences : {sum(len(v) for v in equiv_multi.values())} vars in {len(equiv_multi)} units")
 
-    audit_stmts = count_stmts_audit(inv_raw)
+    audit_stmts = count_stmts_audit(inv_raw, results_dir, audit_data=inputs.get("audit"))
     n_data = sum(v["N_Data_Stmts"] for v in audit_stmts.values())
     n_entry = sum(v["N_Entry_Stmts"] for v in audit_stmts.values())
     if audit_stmts:
@@ -442,22 +430,35 @@ COLUMNS = [
 ]
 
 
-def main():
+def analyze_consolidate(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for
+    report_consolidated when there's nothing to process (same as the
+    original — no file is written in that case)."""
     print("=== Report Consolidation ===\n")
 
-    sources = load_sources()
+    sources = load_sources(results_dir, inputs=inputs)
     rows = build_rows(*sources)
 
     if not rows:
         print("No rows to export.")
-        return
+        return {"report_consolidated": None}
 
     # Sort: first by file, then by implicit Start_Line order from
     # the inventory (preserved as a dict in Python 3.7+)
     # For the final CSV: alphabetical order by file + unit
     rows.sort(key=lambda r: (r["File"].lower(), r["Unit"].lower()))
 
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+    return {"report_consolidated": rows}
+
+
+def write_consolidate(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    rows = data["report_consolidated"]
+    if rows is None:
+        return  # nothing to process — nothing written at all, same as before
+
+    output_file = Path(results_dir) / "report_consolidated.csv"
+    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
@@ -470,7 +471,7 @@ def main():
     criticals = sum(1 for r in rows if r["CC_Level"] == "CRITICAL")
     no_coment = sum(1 for r in rows if r["Pct_Comment"] == 0 and r["SLOC_net"] > 10)
 
-    print(f"\nConsolidated report generated: {CSV_OUTPUT}")
+    print(f"\nConsolidated report generated: {output_file}")
     print(f"  Total rows              : {total}")
     print(f"  With CC metrics         : {con_cc}")
     print(f"  UNREACHABLE units       : {deads}")
@@ -485,6 +486,14 @@ def main():
         print(
             f"  CC={r['CC']:5}  Fan_In={r['Fan_In']:3}  {r['Pct_Comment']:4.1f}%comment  " f"{r['File']:25} {r['Unit']}"
         )
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_consolidate(source_dir, results_dir, inputs=inputs)
+    write_consolidate(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

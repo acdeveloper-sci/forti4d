@@ -15,10 +15,7 @@ from forti4d.analyzers.inventory import load_inventory
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-from forti4d.config import CODE_PATH, RESULTS_PATH
-
-CSV_OUTPUT = RESULTS_PATH / "report_density.csv"
-AUDIT_PATH = RESULTS_PATH / "audit"
+from forti4d import config
 
 # =============================================================================
 # DENSITY GROUPS
@@ -120,72 +117,21 @@ def classify_line(logical_line: str):
     return kinds.StatementKind.UNKNOWN
 
 
-def analyze_density():
-    print("STARTING DENSITY PROFILING (V3 Audited)")
+def _compute_file_density(rel_path, units_on_file, source_dir):
+    """Pure per-file computation. Raises if the source file can't be read.
+    Returns (debug_rows, summary_rows) for this one file."""
+    physical_path = source_dir / rel_path
 
-    files_path = CODE_PATH
-    if not files_path.exists():
-        print(f"ERROR: Directory {CODE_PATH} does not exist")
-        return
+    # Sort by Start_Line for scope resolution
+    units_on_file.sort(key=lambda x: x["Start_Line"])
 
-    # 1. Load Inventory using the function in inventory.py
-    # This returns a list of dicts with keys 'File', 'Start_Line', etc.
-    try:
-        inventory_list = load_inventory()
-        print(f"Inventory loaded: {len(inventory_list)} total records.")
-    except ImportError:
-        print("ERROR: Function 'load_inventory' not found in inventory.py.")
-        return
-    except Exception as e:
-        print(f"Error loading inventory: {e}")
-        return
+    sentences = reader_logical.read_logical_lines(physical_path)
 
-    if not inventory_list:
-        print("Inventory is empty or could not be read.")
-        return
+    counters = defaultdict(Counter)
+    debug_rows = []
 
-    # 2. Group units by File to avoid inefficient iterations
-    # Key: Filename (str) -> Value: List of unit dicts
-    map_units_file = defaultdict(list)
-    for u in inventory_list:
-        rel = u.get("Relative_Path") or u.get("File", "")
-        if rel:
-            map_units_file[rel].append(u)
-
-    output_data = []
-
-    audit_path_ = AUDIT_PATH
-    audit_path_.mkdir(parents=True, exist_ok=True)
-
-    # Sort files alphabetically for the report
-    sorted_files = sorted(map_units_file.keys(), key=lambda x: x.lower())
-
-    for idx, rel_path in enumerate(sorted_files):
-        file_name = Path(rel_path).name
-        print(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
-
-        # Get the units that belong to this file
-        units_on_file = map_units_file[rel_path]
-
-        # Sort by Start_Line for scope resolution
-        # NOTE: We use the correct key 'Start_Line'
-        units_on_file.sort(key=lambda x: x["Start_Line"])
-
-        # Build physical path using relative path to support subdirectories
-        physical_path = files_path / rel_path
-
-        # Read logical lines
-        try:
-            sentences = reader_logical.read_logical_lines(physical_path)
-        except Exception as e:
-            print(f"  -> Read error/File not found: {e}")
-            continue
-
-        counters = defaultdict(Counter)
-        debug_rows = []
-
-        # 3. Classification and Assignment
-        for sentence in sentences:
+    # 3. Classification and Assignment
+    for sentence in sentences:
             if sentence.is_comment:
                 debug_rows.append(
                     {
@@ -247,15 +193,115 @@ def analyze_density():
                 }
             )
 
-        # AUDIT
-        # --- AT THE END OF FILE PROCESSING ---
-        # Generate debug CSV name using sanitized relative path to avoid
-        # basename collisions when source files share names across subdirectories.
+    # 4. Consolidation
+    file_name = Path(rel_path).name
+
+    # Add GLOBAL if code was detected outside of units
+    if "GLOBAL" in counters:
+        if not any(u["Name"] == "GLOBAL" for u in units_on_file):
+            # Create a dummy unit for the report
+            units_on_file.insert(0, {"Name": "GLOBAL", "Type": "FILE_SCOPE", "Start_Line": 0})
+
+    summary_rows = []
+    for u in units_on_file:
+        unit_name = u["Name"]
+        unit_type = u.get("Type", "UNKNOWN")
+
+        c = counters[unit_name]
+        total_sentences = sum(c.values())
+
+        # Sumas
+        n_calcula = sum(c[k] for k in CALCULATION_GROUP if k in c)
+        n_control = sum(c[k] for k in CONTROL_GROUP if k in c)
+        n_io = sum(c[k] for k in IO_GROUP if k in c)
+        n_legacy = sum(c[k] for k in LEGACY_GROUP if k in c)
+        n_declar = sum(c[k] for k in DECLAR_GROUP if k in c)
+
+        # Percentages
+        pct = lambda x: round((x / total_sentences) * 100, 1) if total_sentences > 0 else 0.0
+
+        fila = {
+            "File": file_name,
+            "Unit": unit_name,
+            "Type": unit_type,
+            "Total_Statements": total_sentences,
+            "Total_Calc": n_calcula,
+            "Total_Control": n_control,
+            "Total_IO": n_io,
+            "Total_Legacy": n_legacy,
+            "Total_Decl": n_declar,
+            "Pct_Calc": pct(n_calcula),
+            "Pct_Control": pct(n_control),
+            "Pct_IO": pct(n_io),
+            "Pct_Legacy": pct(n_legacy),
+            "Pct_Decl": pct(n_declar),
+            "N_Common": c[kinds.StatementKind.COMMON_STMT],
+            "N_Equiv": c[kinds.StatementKind.EQUIVALENCE_STMT],
+            "N_Print": c["_IO_PRINT"],
+            "N_Write": c["_IO_WRITE"],
+        }
+        summary_rows.append(fila)
+
+    return debug_rows, summary_rows
+
+
+def analyze_density(source_dir: Path, results_dir: Path, *, inputs=None) -> dict:
+    print("STARTING DENSITY PROFILING (V3 Audited)")
+    inputs = inputs or {}
+
+    if not source_dir.exists():
+        print(f"ERROR: Directory {source_dir} does not exist")
+        return {"report_density": [], "audit": {}}
+
+    # 1. Load Inventory (in-memory from a prior step, or from disk standalone)
+    try:
+        inventory_list = load_inventory(rows=inputs.get("inventory_report"), csv_path=results_dir / "inventory_report.csv")
+        print(f"Inventory loaded: {len(inventory_list)} total records.")
+    except ImportError:
+        print("ERROR: Function 'load_inventory' not found in inventory.py.")
+        return {"report_density": [], "audit": {}}
+    except Exception as e:
+        print(f"Error loading inventory: {e}")
+        return {"report_density": [], "audit": {}}
+
+    if not inventory_list:
+        print("Inventory is empty or could not be read.")
+        return {"report_density": [], "audit": {}}
+
+    # 2. Group units by File to avoid inefficient iterations
+    map_units_file = defaultdict(list)
+    for u in inventory_list:
+        rel = u.get("Relative_Path") or u.get("File", "")
+        if rel:
+            map_units_file[rel].append(u)
+
+    output_data = []
+    audit_data = {}
+
+    audit_path_ = results_dir / "audit"
+    audit_path_.mkdir(parents=True, exist_ok=True)
+
+    # Sort files alphabetically for the report
+    sorted_files = sorted(map_units_file.keys(), key=lambda x: x.lower())
+
+    for idx, rel_path in enumerate(sorted_files):
+        file_name = Path(rel_path).name
+        print(f"[{idx+1}/{len(sorted_files)}] Processing: {file_name}")
+
+        units_on_file = map_units_file[rel_path]
+
+        try:
+            debug_rows, summary_rows = _compute_file_density(rel_path, units_on_file, source_dir)
+        except Exception as e:
+            print(f"  -> Read error/File not found: {e}")
+            continue
+
+        # AUDIT — written immediately per file, not deferred: if the run is
+        # interrupted midway, files already processed stay on disk.
         debug_stem = rel_path.replace("/", "__").replace("\\", "__")
         debug_name = f"{debug_stem}_DEBUG.csv"
         debug_path = audit_path_ / debug_name
 
-        # Write to disk
         try:
             with open(debug_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.DictWriter(f, fieldnames=["Line", "Kind", "Content"])
@@ -265,54 +311,15 @@ def analyze_density():
         except Exception as e:
             print(f"  -> Error saving debug: {e}")
 
-        # 4. Consolidation
+        audit_data[rel_path] = debug_rows
+        output_data.extend(summary_rows)
 
-        # Add GLOBAL if code was detected outside of units
-        if "GLOBAL" in counters:
-            if not any(u["Name"] == "GLOBAL" for u in units_on_file):
-                # Create a dummy unit for the report
-                units_on_file.insert(0, {"Name": "GLOBAL", "Type": "FILE_SCOPE", "Start_Line": 0})
+    return {"report_density": output_data, "audit": audit_data}
 
-        for u in units_on_file:
-            unit_name = u["Name"]
-            unit_type = u.get("Type", "UNKNOWN")
 
-            c = counters[unit_name]
-            total_sentences = sum(c.values())
-
-            # Sumas
-            n_calcula = sum(c[k] for k in CALCULATION_GROUP if k in c)
-            n_control = sum(c[k] for k in CONTROL_GROUP if k in c)
-            n_io = sum(c[k] for k in IO_GROUP if k in c)
-            n_legacy = sum(c[k] for k in LEGACY_GROUP if k in c)
-            n_declar = sum(c[k] for k in DECLAR_GROUP if k in c)
-
-            # Percentages
-            pct = lambda x: round((x / total_sentences) * 100, 1) if total_sentences > 0 else 0.0
-
-            fila = {
-                "File": file_name,
-                "Unit": unit_name,
-                "Type": unit_type,
-                "Total_Statements": total_sentences,
-                "Total_Calc": n_calcula,
-                "Total_Control": n_control,
-                "Total_IO": n_io,
-                "Total_Legacy": n_legacy,
-                "Total_Decl": n_declar,
-                "Pct_Calc": pct(n_calcula),
-                "Pct_Control": pct(n_control),
-                "Pct_IO": pct(n_io),
-                "Pct_Legacy": pct(n_legacy),
-                "Pct_Decl": pct(n_declar),
-                "N_Common": c[kinds.StatementKind.COMMON_STMT],
-                "N_Equiv": c[kinds.StatementKind.EQUIVALENCE_STMT],
-                "N_Print": c["_IO_PRINT"],
-                "N_Write": c["_IO_WRITE"],
-            }
-            output_data.append(fila)
-
-    # 5. Export
+def write_density(results_dir: Path, data: dict) -> None:
+    """Writes only the consolidated report — audit/*_DEBUG.csv files are
+    already written incrementally inside analyze_density (see above)."""
     headers = [
         "File",
         "Unit",
@@ -333,16 +340,24 @@ def analyze_density():
         "N_Print",
         "N_Write",
     ]
-
+    csv_output = results_dir / "report_density.csv"
     try:
-        with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        with open(csv_output, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=headers)
             w.writeheader()
-            w.writerows(output_data)
-        print(f"\nREPORT GENERATED: {CSV_OUTPUT}")
+            w.writerows(data["report_density"])
+        print(f"\nREPORT GENERATED: {csv_output}")
     except Exception as e:
         print(f"Error writing CSV: {e}")
 
 
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_density(source_dir, results_dir, inputs=inputs)
+    write_density(results_dir, data)
+    return data
+
+
 if __name__ == "__main__":
-    analyze_density()
+    main()

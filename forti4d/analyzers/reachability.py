@@ -1,44 +1,43 @@
 import csv
 import sys
 from collections import defaultdict, deque
+from pathlib import Path
 
 from forti4d.analyzers.inventory import load_inventory
-from forti4d.config import RESULTS_PATH
-
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-GRAPH_CSV = RESULTS_PATH / "dep_02_unit_graph.csv"
-CSV_OUTPUT = RESULTS_PATH / "report_reachability.csv"
-
+from forti4d import config
 
 # =============================================================================
 # GRAPH CONSTRUCTION
 # =============================================================================
 
 
-def load_graph():
+def load_graph(rows=None, results_dir=None):
     """
     Returns:
       graph      : dict  graph_node (str) -> set of destination graph_nodes (str)
       nodes_upper: dict  name.upper() -> name_in_graph  (for lookup)
 
     Graph nodes are in uppercase (subroutines/functions) or prefixed with
-    'MAIN__file.f90' (for IMPLICIT-MAIN).
+    'MAIN__file.f90' (for IMPLICIT-MAIN). Uses in-memory `rows` if given,
+    otherwise reads dep_02_unit_graph.csv from results_dir.
     """
     graph = defaultdict(set)
 
-    try:
-        with open(GRAPH_CSV, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                source = row.get("Source_Unit", "").strip()
-                target = row.get("Target_Unit", "").strip()
-                dp_type = row.get("Dep_Type", "").strip()
-                if source and target and dp_type in ("CALL", "USE", "FUNC_CALL"):
-                    graph[source].add(target)
-    except FileNotFoundError:
-        print(f"ERROR: {GRAPH_CSV} not found")
-        sys.exit(1)
+    if rows is None:
+        graph_csv = Path(results_dir) / "dep_02_unit_graph.csv"
+        try:
+            with open(graph_csv, encoding="utf-8-sig") as f:
+                rows = list(csv.DictReader(f))
+        except FileNotFoundError:
+            print(f"ERROR: {graph_csv} not found")
+            sys.exit(1)
+
+    for row in rows:
+        source = row.get("Source_Unit", "").strip()
+        target = row.get("Target_Unit", "").strip()
+        dp_type = row.get("Dep_Type", "").strip()
+        if source and target and dp_type in ("CALL", "USE", "FUNC_CALL"):
+            graph[source].add(target)
 
     # Case-insensitive index of all graph nodes
     all_index = set(graph.keys())
@@ -107,26 +106,26 @@ def calculate_reachability(graph: dict, seeds: list) -> dict:
 # =============================================================================
 
 
-def _write_empty_csv():
-    columns = ["File", "Unit", "Type", "Parent", "Status", "Via_Entry_Points", "Reason"]
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
-        csv.DictWriter(f, fieldnames=columns).writeheader()
-
-
-def analyze_reachability():
+def analyze_reachability(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for report_reachability
+    when there's a load error (no file written at all, same as the
+    original); an empty list when there's no data to analyze (headers-only
+    file is still written, same as the original)."""
+    inputs = inputs or {}
     print("--- Reachability / Dead Code Analysis ---")
 
     # 1. Load inventory
     try:
-        inventory_list = load_inventory()
+        inventory_list = load_inventory(
+            rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+        )
     except Exception as e:
         print(f"ERROR loading inventory: {e}")
-        return
+        return {"report_reachability": None}
 
     if not inventory_list:
         print("Inventory is empty.")
-        _write_empty_csv()
-        return
+        return {"report_reachability": []}
 
     # 2. Identify entry points
     eps_units = [
@@ -137,13 +136,12 @@ def analyze_reachability():
 
     if not eps_units:
         print("No entry points found (PROGRAM / IMPLICIT-MAIN) — writing empty report.")
-        _write_empty_csv()
-        return
+        return {"report_reachability": []}
 
     print(f"Entry points detected: {len(eps_units)}")
 
     # 3. Load graph with case-insensitive index
-    graph, nodes_upper = load_graph()
+    graph, nodes_upper = load_graph(rows=inputs.get("dep_02_unit_graph"), results_dir=results_dir)
     print(f"Graph loaded: {sum(len(v) for v in graph.values())} edges " f"({len(graph)} source nodes)")
 
     # 4. Map entry points to graph nodes and prepare seeds for BFS
@@ -262,14 +260,30 @@ def analyze_reachability():
     order = {"UNREACHABLE": 0, "ENTRY_POINT": 1, "REACHABLE": 2}
     rows.sort(key=lambda x: (order[x["Status"]], x["File"].lower(), x["Unit"].lower()))
 
-    # 9. Export
+    return {"report_reachability": rows}
+
+
+def write_reachability(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    rows = data["report_reachability"]
+    if rows is None:
+        return  # load error — nothing written at all, same as before
+
     columns = ["File", "Unit", "Type", "Parent", "Status", "Via_Entry_Points", "Reason"]
-    with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+    output_file = Path(results_dir) / "report_reachability.csv"
+    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
         w.writerows(rows)
 
+    if not rows:
+        return  # empty inventory / no entry points — headers-only, no summary
+
     # 10. Console summary
+    count = {"REACHABLE": 0, "UNREACHABLE": 0, "ENTRY_POINT": 0}
+    for r in rows:
+        count[r["Status"]] += 1
+
     total = len(rows)
     n_dead = count["UNREACHABLE"]
     n_live = count["REACHABLE"]
@@ -293,8 +307,16 @@ def analyze_reachability():
             parent_str = f" (in {r['Parent']})" if r["Parent"] != "GLOBAL" else ""
             print(f"    {r['Unit']:30} {type_str}{parent_str}")
 
-    print(f"\nGenerated: {CSV_OUTPUT}")
+    print(f"\nGenerated: {output_file}")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_reachability(source_dir, results_dir, inputs=inputs)
+    write_reachability(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":
-    analyze_reachability()
+    main()
