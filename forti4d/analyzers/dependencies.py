@@ -1,10 +1,11 @@
 import sys
-import os
 import csv
 import re
 from pathlib import Path
 from collections import defaultdict, Counter
 from typing import List, Dict, Set, Tuple
+
+from loguru import logger
 
 # --- IMPORT OF BASE TOOLS ---
 try:
@@ -17,24 +18,13 @@ try:
         RE_INTERFACE,
     )
 except ImportError as e:
-    print(f"ERROR: Missing base files (reader.py or patterns.py).\n{e}")
+    logger.error(f"ERROR: Missing base files (reader.py or patterns.py).\n{e}")
     sys.exit(1)
 
 # =============================================================================
 # CONFIGURATION AND CONSTANTS
 # =============================================================================
-from forti4d.config import CODE_PATH, RESULTS_PATH
-
-INVENTORY_FILE = RESULTS_PATH / "inventory_report.csv"
-
-# Output Files
-AMBIGUITIES_OUT = RESULTS_PATH / "dep_00_ambiguities.csv"
-MASTER_OUT = RESULTS_PATH / "dep_01_master_data.csv"
-GRAPH_OUT = RESULTS_PATH / "dep_02_unit_graph.csv"
-IMPACT_OUT = RESULTS_PATH / "dep_03_impact_matrix.csv"
-ORPHANS_OUT = RESULTS_PATH / "dep_04_external_orphans.csv"
-DEPENDS_OUT = RESULTS_PATH / "dep_05_file_dependencies.csv"
-INCLUDES_OUT = RESULTS_PATH / "dep_06_include_files.csv"
+from forti4d import config
 
 # Nature Hierarchy (Lower index = Stronger)
 NATURE_HIERARCHY = {
@@ -248,45 +238,55 @@ def get_strongest_nature(nature_set: Set[str]) -> str:
 # =============================================================================
 
 
-def load_inventory_enhanced(report_ambiguities=False) -> Tuple[Dict, Dict]:
+def load_inventory_enhanced(rows=None, results_dir=None) -> Tuple[Dict, Dict, List[Dict]]:
     """
-    Loads inventory and detects duplicates.
+    Builds a name-indexed inventory lookup + per-file unit map, and computes
+    the ambiguity report rows. Pure — does not touch disk.
+
+    If `rows` is given (in-memory inventory from a prior step in the same
+    pipeline run), uses it directly. Otherwise reads inventory_report.csv
+    from results_dir — the standalone path, used when this step runs on
+    its own with only its inputs on disk.
+
     Returns:
       - inventory: {NOMBRE_UPPER: [ {file, type, parent, ...}, ... ]}
       - file_map: {FILE: set(DEFINED_UNIT_NAMES)}
-    Generates a GLOBAL ambiguities report.
+      - ambiguous_rows: list[dict], global ambiguity report rows
     """
     inventory = defaultdict(list)
     file_map = defaultdict(set)  # Quick lookup of what each file defines
 
-    if not os.path.exists(INVENTORY_FILE):
-        print(f"ERROR: '{INVENTORY_FILE}' does not exist. Run inventory.py first.")
-        sys.exit(1)
+    if rows is None:
+        inventory_file = Path(results_dir) / "inventory_report.csv"
+        if not inventory_file.exists():
+            logger.error(f"ERROR: '{inventory_file}' does not exist. Run inventory.py first.")
+            sys.exit(1)
 
-    print("Loading inventory...")
-    with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
-        reader_csv = csv.DictReader(f)
-        for row in reader_csv:
-            name = row.get("Name", "").strip().upper()
-            file = row.get("File", "").strip()
-            utype = row.get("Type", "").strip().upper()
-            # READ THE PARENT (if column does not exist, assume GLOBAL for compatibility)
-            parent = row.get("Parent", "GLOBAL").strip().upper()
+        logger.info("Loading inventory...")
+        with open(inventory_file, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
 
-            # Name adjustment for Implicit Main in the Inventory (if applicable)
-            # Normally the inventory already carries "IMPLICIT-MAIN".
-            # We will handle it at resolution time, or we can pre-process it.
+    for row in rows:
+        name = row.get("Name", "").strip().upper()
+        file = row.get("File", "").strip()
+        utype = row.get("Type", "").strip().upper()
+        # READ THE PARENT (if column does not exist, assume GLOBAL for compatibility)
+        parent = row.get("Parent", "GLOBAL").strip().upper()
 
-            if name:
-                # We save ALL the info needed to decide later
-                inventory[name].append(
-                    {
-                        "file": file,
-                        "type": utype,
-                        "parent": parent,
-                    }
-                )
-                file_map[file].add(name)
+        # Name adjustment for Implicit Main in the Inventory (if applicable)
+        # Normally the inventory already carries "IMPLICIT-MAIN".
+        # We will handle it at resolution time, or we can pre-process it.
+
+        if name:
+            # We save ALL the info needed to decide later
+            inventory[name].append(
+                {
+                    "file": file,
+                    "type": utype,
+                    "parent": parent,
+                }
+            )
+            file_map[file].add(name)
 
     # Ambiguity Detection (Global Informational Only)
     ambiguous_rows = []
@@ -308,19 +308,8 @@ def load_inventory_enhanced(report_ambiguities=False) -> Tuple[Dict, Dict]:
                 }
             )
 
-    # Save ambiguity report — always written when called from the pipeline
-    if report_ambiguities:
-        with open(AMBIGUITIES_OUT, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Unit_Name", "Type", "Count", "File_List"])
-            w.writeheader()
-            w.writerows(ambiguous_rows)
-        if ambiguous_rows:
-            print(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {AMBIGUITIES_OUT})")
-        else:
-            print(f"  -> No ambiguous unit names found (see {AMBIGUITIES_OUT})")
-
     # Return 'inventory' as-is (list of candidates) so resolution can decide
-    return inventory, file_map
+    return inventory, file_map, ambiguous_rows
 
 
 def scan_file(file_path: Path, source_path: Path = None) -> List[Dict]:
@@ -334,7 +323,7 @@ def scan_file(file_path: Path, source_path: Path = None) -> List[Dict]:
     try:
         logical_lines = read_logical_lines(str(file_path))
     except Exception as e:
-        print(f"Error reading {file_path.name}: {e}")
+        logger.warning(f"Error reading {file_path.name}: {e}")
         return []
 
     # Base name for implicit units
@@ -516,16 +505,19 @@ def scan_file(file_path: Path, source_path: Path = None) -> List[Dict]:
     return raw_deps
 
 
-def main():
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
+def analyze_dependencies(source_dir: Path, results_dir: Path, *, inputs=None) -> dict:
+    """Pure computation. Returns a dict with all 7 logical datasets. No disk writes."""
+    inputs = inputs or {}
 
     # 1. Load base data
-    inventory, _ = load_inventory_enhanced(report_ambiguities=True)
-    source_path = CODE_PATH
+    inventory, _, ambiguous_rows = load_inventory_enhanced(
+        rows=inputs.get("inventory_report"), results_dir=results_dir
+    )
+    source_path = source_dir
 
     # 2. Scan Files
     files = sorted([f for f in source_path.rglob("*") if f.suffix.lower() in (".f90", ".f", ".for", ".f95")])
-    print(f"Analyzing {len(files)} files...")
+    logger.info(f"Analyzing {len(files)} files...")
 
     all_raw_deps = []
     for f in files:
@@ -548,7 +540,7 @@ def main():
     file_deps_map = defaultdict(set)
     file_deps_details = defaultdict(set)  # To list dep types (USE, CALL...)
 
-    print("Resolving dependencies with Scope...")
+    logger.info("Resolving dependencies with Scope...")
 
     for item in all_raw_deps:
         target = item["target_raw"]
@@ -567,7 +559,7 @@ def main():
             dest_file = target
             dest_type = "FILE"
             # Verificar existencia
-            if not (CODE_PATH / target).exists():
+            if not (source_path / target).exists():
                 dest_file = "MISSING_FILE"
 
         else:
@@ -655,46 +647,24 @@ def main():
                 file_deps_map[pair].add(item["nature"])
                 file_deps_details[pair].add(dtype)
 
-    # 4. CSV File Generation
-
-    # A. Master
-    keys_master = [
-        "Source_File",
-        "Source_Unit",
-        "Source_Type",
-        "Dep_Type",
-        "Target_Unit",
-        "Target_Type",
-        "Target_File",
-        "Source_Line",
-    ]
-    with open(MASTER_OUT, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=keys_master)
-        w.writeheader()
-        w.writerows(master_rows)
-    if master_rows:
-        print(f"Generated:{MASTER_OUT}")
+    # 4. Build the 7 logical datasets (no disk writes here)
 
     # B. Units Graph
-    with open(GRAPH_OUT, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(
-            [
-                "Source_Unit",
-                "Source_Type",
-                "Target_Unit",
-                "Target_Type",
-                "Dep_Type",
-                "Target_File",
-                "Weight",
-            ]
+    graph_rows = []
+    for row in sorted(list(graph_edges)):
+        key = (row[0], row[2], row[1], row[3])
+        weight = edges_counter[key]
+        graph_rows.append(
+            {
+                "Source_Unit": row[0],
+                "Source_Type": row[1],
+                "Target_Unit": row[2],
+                "Target_Type": row[3],
+                "Dep_Type": row[4],
+                "Target_File": row[5],
+                "Weight": weight,
+            }
         )
-        for row in sorted(list(graph_edges)):
-            key = (row[0], row[2], row[1], row[3])
-            weight = edges_counter[key]
-            w.writerow(row + (weight,))
-    if graph_edges:
-        print(f"Generated:{GRAPH_OUT}")
 
     # C. Impact Matrix
     all_units = set(impact_fan_out.keys()) | set(impact_fan_in.keys())
@@ -718,21 +688,9 @@ def main():
                 "Fan_In": impact_fan_in.get(u, 0),
             }
         )
-    with open(IMPACT_OUT, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["Unit", "Type", "File", "Fan_Out", "Fan_In"])
-        w.writeheader()
-        w.writerows(rows_impact)
-    if rows_impact:
-        print(f"Generated:{IMPACT_OUT}")
 
     # D. Orphans
-    with open(ORPHANS_OUT, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["Target_Unit", "Dep_Type", "Status"])
-        for u, t in sorted(list(orphans_set)):
-            w.writerow([u, t, "EXTERNAL_OR_LIBRARY"])
-    if orphans_set:
-        print(f"Generated:{ORPHANS_OUT}")
+    orphan_rows = [{"Target_Unit": u, "Dep_Type": t, "Status": "EXTERNAL_OR_LIBRARY"} for u, t in sorted(list(orphans_set))]
 
     # E. File Dependencies
     file_rows = []
@@ -749,13 +707,6 @@ def main():
                 "Detail_Types": details,
             }
         )
-    with open(DEPENDS_OUT, "w", newline="", encoding="utf-8") as f:
-        keys = ["Source_File", "Target_File", "Strong_Nature", "Nature_List", "Detail_Types"]
-        w = csv.DictWriter(f, fieldnames=keys)
-        w.writeheader()
-        w.writerows(file_rows)
-    if file_rows:
-        print(f"Generated:{DEPENDS_OUT}")
 
     # F. INCLUDE file references — one row per INCLUDE statement
     include_rows = []
@@ -768,7 +719,7 @@ def main():
         if key in seen_includes:
             continue
         seen_includes.add(key)
-        estado = "PRESENT" if (CODE_PATH / target).exists() else "MISSING"
+        estado = "PRESENT" if (source_path / target).exists() else "MISSING"
         include_rows.append(
             {
                 "Source_File": item["source_file"],
@@ -778,13 +729,119 @@ def main():
             }
         )
     include_rows.sort(key=lambda r: (r["Source_File"], r["Source_Unit"]))
-    with open(INCLUDES_OUT, "w", newline="", encoding="utf-8") as f:
+
+    return {
+        "dep_00_ambiguities": ambiguous_rows,
+        "dep_01_master_data": master_rows,
+        "dep_02_unit_graph": graph_rows,
+        "dep_03_impact_matrix": rows_impact,
+        "dep_04_external_orphans": orphan_rows,
+        "dep_05_file_dependencies": file_rows,
+        "dep_06_include_files": include_rows,
+    }
+
+
+def write_dependencies(results_dir: Path, data: dict) -> None:
+    """Only place that touches disk for this step. Same 7 files, same behavior as before —
+    each is always written (even if empty), only the console message is conditional."""
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    ambiguities_out = results_dir / "dep_00_ambiguities.csv"
+    master_out = results_dir / "dep_01_master_data.csv"
+    graph_out = results_dir / "dep_02_unit_graph.csv"
+    impact_out = results_dir / "dep_03_impact_matrix.csv"
+    orphans_out = results_dir / "dep_04_external_orphans.csv"
+    depends_out = results_dir / "dep_05_file_dependencies.csv"
+    includes_out = results_dir / "dep_06_include_files.csv"
+
+    ambiguous_rows = data["dep_00_ambiguities"]
+    with open(ambiguities_out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["Unit_Name", "Type", "Count", "File_List"])
+        w.writeheader()
+        w.writerows(ambiguous_rows)
+    if ambiguous_rows:
+        logger.success(f"  -> Detected {len(ambiguous_rows)} ambiguous units (see {ambiguities_out})")
+    else:
+        logger.success(f"  -> No ambiguous unit names found (see {ambiguities_out})")
+
+    # A. Master
+    keys_master = [
+        "Source_File",
+        "Source_Unit",
+        "Source_Type",
+        "Dep_Type",
+        "Target_Unit",
+        "Target_Type",
+        "Target_File",
+        "Source_Line",
+    ]
+    master_rows = data["dep_01_master_data"]
+    with open(master_out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=keys_master)
+        w.writeheader()
+        w.writerows(master_rows)
+    if master_rows:
+        logger.success(f"Generated:{master_out}")
+
+    # B. Units Graph
+    graph_rows = data["dep_02_unit_graph"]
+    with open(graph_out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(
+            f,
+            fieldnames=["Source_Unit", "Source_Type", "Target_Unit", "Target_Type", "Dep_Type", "Target_File", "Weight"],
+        )
+        w.writeheader()
+        w.writerows(graph_rows)
+    if graph_rows:
+        logger.success(f"Generated:{graph_out}")
+
+    # C. Impact Matrix
+    rows_impact = data["dep_03_impact_matrix"]
+    with open(impact_out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["Unit", "Type", "File", "Fan_Out", "Fan_In"])
+        w.writeheader()
+        w.writerows(rows_impact)
+    if rows_impact:
+        logger.success(f"Generated:{impact_out}")
+
+    # D. Orphans
+    orphan_rows = data["dep_04_external_orphans"]
+    with open(orphans_out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["Target_Unit", "Dep_Type", "Status"])
+        w.writeheader()
+        w.writerows(orphan_rows)
+    if orphan_rows:
+        logger.success(f"Generated:{orphans_out}")
+
+    # E. File Dependencies
+    file_rows = data["dep_05_file_dependencies"]
+    with open(depends_out, "w", newline="", encoding="utf-8") as f:
+        keys = ["Source_File", "Target_File", "Strong_Nature", "Nature_List", "Detail_Types"]
+        w = csv.DictWriter(f, fieldnames=keys)
+        w.writeheader()
+        w.writerows(file_rows)
+    if file_rows:
+        logger.success(f"Generated:{depends_out}")
+
+    # F. INCLUDE file references
+    include_rows = data["dep_06_include_files"]
+    with open(includes_out, "w", newline="", encoding="utf-8") as f:
         keys = ["Source_File", "Source_Unit", "Included_File", "Status"]
         w = csv.DictWriter(f, fieldnames=keys)
         w.writeheader()
         w.writerows(include_rows)
     if include_rows:
-        print(f"Generated: {INCLUDES_OUT} ({len(include_rows)} INCLUDE references)")
+        logger.success(f"Generated: {includes_out} ({len(include_rows)} INCLUDE references)")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    data = analyze_dependencies(source_dir, results_dir, inputs=inputs)
+    write_dependencies(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

@@ -3,16 +3,10 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from forti4d.analyzers.inventory import load_inventory
-from forti4d.config import RESULTS_PATH
+from loguru import logger
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-AUDIT_PATH = RESULTS_PATH / "audit"
-VARS_OUTPUT = RESULTS_PATH / "symbol_variables.csv"
-SIGNATURES_OUTPUT = RESULTS_PATH / "symbol_signatures.csv"
-IMPLICIT_OUTPUT = RESULTS_PATH / "symbol_implicit.csv"
+from forti4d.analyzers.inventory import load_inventory
+from forti4d import config
 
 VARIABLES_COLS = [
     "File",
@@ -530,19 +524,24 @@ _KINDS_INTEREST = {
 }
 
 
-def extract_symbols():
-    print("--- Symbol Extraction ---")
+def extract_symbols(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for all 3 outputs when
+    there's nothing to process (same as the original — no file is written)."""
+    inputs = inputs or {}
+    logger.debug("--- Symbol Extraction ---")
 
     # 1. Inventory
     try:
-        inventory_list = load_inventory()
+        inventory_list = load_inventory(
+            rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+        )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
-        return
+        logger.warning(f"ERROR loading inventory: {e}")
+        return {"symbol_variables": None, "symbol_signatures": None, "symbol_implicit": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
-        return
+        logger.warning("Inventory is empty.")
+        return {"symbol_variables": None, "symbol_signatures": None, "symbol_implicit": None}
 
     # Group units by file, ensuring int types
     units_map = defaultdict(list)
@@ -566,80 +565,96 @@ def extract_symbols():
     # used in post-processing to fill In_Common in filas_vars
     common_map = defaultdict(dict)
 
-    n_vars = n_signatures = n_impl = 0
+    audit_data = inputs.get("audit")  # {rel_path: debug_rows}, from profiler.py — avoids re-reading from disk
+    audit_path_ = Path(results_dir) / "audit"
     sorted_files = sorted(units_map.keys(), key=str.lower)
 
     # 2. Process each file
     for rel_path in sorted_files:
         file_name = Path(rel_path).name
-        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
-        debug_file = AUDIT_PATH / f"{debug_stem}_DEBUG.csv"
-        if not debug_file.exists():
-            continue
+
+        debug_rows = audit_data.get(rel_path) if audit_data is not None else None
+        if debug_rows is None:
+            debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+            debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
+            if not debug_file.exists():
+                continue
+            with open(debug_file, encoding="utf-8-sig") as f:
+                debug_rows = list(csv.DictReader(f))
 
         units_on_file = sorted(units_map[rel_path], key=lambda u: u["Start_Line"])
 
-        with open(debug_file, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                kind = row.get("Kind", "")
-                if kind not in _KINDS_INTEREST:
-                    continue
+        for row in debug_rows:
+            kind = row.get("Kind", "")
+            if kind not in _KINDS_INTEREST:
+                continue
 
-                try:
-                    n_line = int(row["Line"])
-                except (ValueError, KeyError):
-                    continue
+            try:
+                n_line = int(row["Line"])
+            except (ValueError, KeyError):
+                continue
 
-                content = row.get("Content", "")
-                scope, unit_type = scope_resolver(n_line, units_on_file)
+            content = row.get("Content", "")
+            scope, unit_type = scope_resolver(n_line, units_on_file)
 
-                if kind in ("SUBROUTINE_UNIT", "FUNCTION_UNIT"):
-                    news = parse_signature(content, kind, scope, unit_type, file_name, n_line)
-                    rows_signatures.extend(news)
-                    n_signatures += len(news)
+            if kind in ("SUBROUTINE_UNIT", "FUNCTION_UNIT"):
+                news = parse_signature(content, kind, scope, unit_type, file_name, n_line)
+                rows_signatures.extend(news)
 
-                elif kind == "VAR_DECLARATION":
-                    news = parse_declaration(content, scope, unit_type, file_name, n_line)
-                    rows_vars.extend(news)
-                    n_vars += len(news)
+            elif kind == "VAR_DECLARATION":
+                news = parse_declaration(content, scope, unit_type, file_name, n_line)
+                rows_vars.extend(news)
 
-                elif kind == "PARAMETER_STMT":
-                    news = parse_parameter(content, scope, unit_type, file_name, n_line)
-                    rows_vars.extend(news)
-                    n_vars += len(news)
+            elif kind == "PARAMETER_STMT":
+                news = parse_parameter(content, scope, unit_type, file_name, n_line)
+                rows_vars.extend(news)
 
-                elif kind == "IMPLICIT_STMT":
-                    rows_implicit.append(parse_implicit(content, scope, unit_type, file_name, n_line))
-                    n_impl += 1
+            elif kind == "IMPLICIT_STMT":
+                rows_implicit.append(parse_implicit(content, scope, unit_type, file_name, n_line))
 
-                elif kind == "COMMON_STMT":
-                    mapping = extract_common_vars(content)
-                    common_map[(file_name, scope.upper())].update(mapping)
+            elif kind == "COMMON_STMT":
+                mapping = extract_common_vars(content)
+                common_map[(file_name, scope.upper())].update(mapping)
 
     # 3. Post-processing: enrich filas_vars with In_Common
     for row in rows_vars:
         key = (row["File"], row["Unit"].upper())
         row["In_Common"] = common_map.get(key, {}).get(row["Var_Name"], "")
 
+    return {
+        "symbol_variables": rows_vars,
+        "symbol_signatures": rows_signatures,
+        "symbol_implicit": rows_implicit,
+        "common_units_count": len(common_map),
+    }
+
+
+def write_symbols(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    rows_vars = data["symbol_variables"]
+    if rows_vars is None:
+        return  # inventory empty / load error — nothing written at all, same as before
+
+    results_dir = Path(results_dir)
+    rows_signatures = data["symbol_signatures"]
+    rows_implicit = data["symbol_implicit"]
+
     # 4. Export CSVs
-    _write_csv(VARS_OUTPUT, rows_vars, VARIABLES_COLS)
-    _write_csv(SIGNATURES_OUTPUT, rows_signatures, SIGNATURES_COLS)
-    _write_csv(IMPLICIT_OUTPUT, rows_implicit, IMPLICIT_COLS)
+    _write_csv(results_dir / "symbol_variables.csv", rows_vars, VARIABLES_COLS)
+    _write_csv(results_dir / "symbol_signatures.csv", rows_signatures, SIGNATURES_COLS)
+    _write_csv(results_dir / "symbol_implicit.csv", rows_implicit, IMPLICIT_COLS)
 
     # 5. Console summary
-    n_units_impl = len({(f["File"], f["Unit"]) for f in rows_implicit})
     n_impl_none = sum(1 for f in rows_implicit if f["Is_None"] == "YES")
-    n_con_common = len(common_map)
 
-    print(f"Variables / constants   : {n_vars}")
-    print(f"Formal arguments        : {n_signatures}")
-    print(f"IMPLICIT statements     : {n_impl}  ({n_impl_none} IMPLICIT NONE)")
-    print(f"Units with COMMON map   : {n_con_common}")
-    print()
-    print(f"Generated:")
-    print(f"  {VARS_OUTPUT}")
-    print(f"  {SIGNATURES_OUTPUT}")
-    print(f"  {IMPLICIT_OUTPUT}")
+    logger.info(f"Variables / constants   : {len(rows_vars)}")
+    logger.info(f"Formal arguments        : {len(rows_signatures)}")
+    logger.info(f"IMPLICIT statements     : {len(rows_implicit)}  ({n_impl_none} IMPLICIT NONE)")
+    logger.info(f"Units with COMMON map   : {data['common_units_count']}")
+    logger.success("Generated:")
+    logger.success(f"  {results_dir / 'symbol_variables.csv'}")
+    logger.success(f"  {results_dir / 'symbol_signatures.csv'}")
+    logger.success(f"  {results_dir / 'symbol_implicit.csv'}")
 
 
 # =============================================================================
@@ -652,7 +667,7 @@ def _write_csv(path: Path, rows: list, columns: list):
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"  → {path.name}  ({len(rows)} rows)")
+    logger.debug(f"  → {path.name}  ({len(rows)} rows)")
 
 
 # =============================================================================
@@ -660,8 +675,12 @@ def _write_csv(path: Path, rows: list, columns: list):
 # =============================================================================
 
 
-def main():
-    extract_symbols()
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = extract_symbols(source_dir, results_dir, inputs=inputs)
+    write_symbols(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

@@ -15,10 +15,9 @@ import html
 from datetime import datetime
 from pathlib import Path
 
-from forti4d.config import RESULTS_PATH
+from loguru import logger
 
-PRIORITY_CSV = RESULTS_PATH / "report_prioritization.csv"
-HTML_OUTPUT = RESULTS_PATH / "report.html"
+from forti4d import config
 
 # Visible columns in the main table: (CSV_field, display_label)
 TABLE_COLUMNS = [
@@ -55,11 +54,16 @@ TIER_TEXT_COLORS = {
 }
 
 
-def data_load():
-    if not PRIORITY_CSV.exists():
-        print(f"ERROR: {PRIORITY_CSV} not found. Run prioritization.py first.")
+def data_load(rows=None, results_dir=None):
+    """Uses in-memory `rows` if given, otherwise reads
+    report_prioritization.csv from results_dir."""
+    if rows is not None:
+        return rows
+    priority_csv = Path(results_dir) / "report_prioritization.csv"
+    if not priority_csv.exists():
+        logger.warning(f"ERROR: {priority_csv} not found. Run prioritization.py first.")
         return []
-    with open(PRIORITY_CSV, encoding="utf-8-sig") as f:
+    with open(priority_csv, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 
@@ -269,17 +273,37 @@ function sortTable(col) {
     return doc
 
 
-def main():
-    rows = data_load()
+def analyze_html_report(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for report_html when
+    there's nothing to process (same as the original — no file is written)."""
+    inputs = inputs or {}
+    rows = data_load(rows=inputs.get("report_prioritization"), results_dir=results_dir)
     if not rows:
-        return
+        return {"report_html": None}
 
     doc = generate_html(rows)
+    return {"report_html": doc, "n_units": len(rows)}
 
-    with open(HTML_OUTPUT, "w", encoding="utf-8") as f:
+
+def write_html_report(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    doc = data["report_html"]
+    if doc is None:
+        return  # nothing to process — nothing written at all, same as before
+
+    output_file = Path(results_dir) / "report.html"
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(doc)
 
-    print(f"Generated: {HTML_OUTPUT} ({len(rows)} units)")
+    logger.success(f"Generated: {output_file} ({data['n_units']} units)")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_html_report(source_dir, results_dir, inputs=inputs)
+    write_html_report(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":
