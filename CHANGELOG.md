@@ -6,6 +6,89 @@ Versioning follows [Semantic Versioning](https://semver.org/) from v0.7.0 onward
 
 ---
 
+## [0.8.0] — 2026-08-01
+
+### Added
+- **In-process library API** (Bloque 1): `import forti4d; forti4d.run_pipeline(...)`
+  runs the full pipeline without subprocess — no more shelling out to
+  `python -m forti4d.pipeline`. All 19 analyzers now follow a consistent
+  `analyze_xxx()` / `write_xxx()` / `main()` contract, returning results in
+  memory in addition to (never instead of) writing their CSV/report files.
+  CLI behavior, flags, and output files are unchanged.
+- **Opt-in per-file parallelism** (Bloque 2): `--workers N` / `FORT_WORKERS`
+  parallelizes the three heaviest, fully-independent-per-file steps —
+  `inventory`, `profiler`, `blocks` — via `ProcessPoolExecutor`. Default is
+  `workers=1` (sequential); behavior is unchanged unless explicitly requested.
+  `forti4d/lib/parallel.py::pmap()` guarantees sequential/parallel output
+  parity by construction — both modes run the exact same code path.
+- **Real logging via loguru** (Bloque 3): all internal `print()` diagnostics
+  across the 19 analyzers replaced with `logger.debug/info/success/warning/
+  error()` calls. Every run now writes a full-detail log to
+  `<results_dir>/forti4d.log` (always DEBUG+, regardless of `--quiet`); new
+  `--log-file PATH` and `--no-log-file` CLI flags override or disable it.
+  Library callers (`forti4d.run_pipeline()`) stay silent by default — call
+  the new `forti4d.configure_logging()` to opt in to console/file output.
+  `loguru` is forti4d's first third-party dependency.
+
+### Changed
+- **`--quiet` redefined**: now a console log-level filter (WARNING+ instead
+  of INFO+) rather than an all-or-nothing toggle. Previously a successful
+  `--quiet` run discarded all internal diagnostic output with no trace
+  anywhere; now it's always captured in `forti4d.log`.
+- `run_pipeline()`'s `on_step_end` callback signature changed from
+  `(name, success, elapsed, error, output)` to `(name, success, elapsed,
+  error)` — the `output` param (captured stdout) is gone now that step
+  output goes through loguru instead of `redirect_stdout`. `run_pipeline()`
+  also drops its `quiet=` parameter (superseded by `configure_logging()`).
+  Both breaks are on this unpublished feature branch — no external consumer
+  depends on either signature yet.
+
+### Fixed
+- `clones.py::build_file_index`: indexed Fortran source files by basename
+  (`f.name`) instead of relative path — silently dropped all but one file
+  when multiple files share the same name in different subdirectories (e.g.,
+  `main.F` in 19 subdirs of FVCOM); changed to `f.relative_to(path)`.
+- `dependencies.py::load_inventory_enhanced`: used `File` (basename) as the
+  identifier key for inventory entries, causing `dep_00_ambiguities.csv` and
+  `dep_01_master_data.csv` to list only the basename when different files in
+  subdirectories share the same name — changed to `Relative_Path`, with
+  fallback to `File` for backward compatibility with older inventory files.
+- `clones.py`: pairwise comparison called `read_logical_lines()` once per
+  file pair, re-parsing the same source file multiple times when it appeared
+  in several ambiguity groups — added a per-run parse cache (`_parse_cache`)
+  so each file is parsed at most once per pipeline run.
+- `inventory.py::write_inventory`: skipped creating `inventory_report.csv`
+  entirely when the source directory contained no Fortran units (`if rows:`
+  guard) — violated the pipeline invariant; now always writes the file, with
+  headers only when the inventory is empty.
+- `clones.py::analyze_clones`: returned `None` for `report_clones` when the
+  inventory was empty, causing `write_clones` to skip writing the output file
+  — violated the pipeline invariant; now returns an empty list so
+  `write_clones` always writes `report_clones.csv` (headers only).
+- `cross_analysis.py::to_float()`: crashed on native `int`/`float` values for
+  `Fan_In`/`Fan_Out` when fed in-memory (non-CSV-string) data from the new
+  library API — added an `isinstance(val, str)` guard before `.strip()`.
+- `visual_graph.py`: treated `0` (native int, from in-memory data) as falsy
+  but `"0"` (CSV string) as truthy, silently dropping the `Fi=0` label for
+  units with zero Fan-In — changed to explicit `!= ""` comparisons.
+
+### Documentation
+- `README.md`: Requirements section now lists `loguru` instead of claiming
+  stdlib-only; Quick Start documents the new `--quiet` semantics and
+  `--no-log-file`.
+
+### Tests
+- `tests/test_output_manifest.py`, `tests/test_lib_pipeline.py`: new —
+  byte-for-byte regression gate and library-vs-CLI parity check.
+- `tests/test_parallel_helper.py`, `tests/test_parallel_parity.py`: new —
+  `pmap()` order/parity guarantees and workers=1 vs workers=2 output parity,
+  scoped and full-pipeline.
+- `tests/test_logging_setup.py`, `tests/test_logging_behavior.py`: new —
+  raw loguru API assumptions, `configure_logging()` behavior, and CLI/library
+  end-to-end logging behavior via subprocess.
+
+---
+
 ## [0.7.4] — 2026-07-31
 
 ### Fixed

@@ -3,14 +3,10 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-from forti4d.analyzers.inventory import load_inventory
-from forti4d.config import RESULTS_PATH
+from loguru import logger
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-AUDIT_PATH = RESULTS_PATH / "audit"
-CSV_OUTPUT = RESULTS_PATH / "report_complexity.csv"
+from forti4d.analyzers.inventory import load_inventory
+from forti4d import config
 
 
 # =============================================================================
@@ -77,21 +73,27 @@ def interpret_cc(cc: int) -> str:
 # =============================================================================
 
 
-def analyze_complexity():
-    print("--- McCabe Cyclomatic Complexity ---")
+def analyze_complexity(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for report_complexity
+    when there's nothing to process (same as the original — no file is
+    written in that case either)."""
+    inputs = inputs or {}
+    logger.debug("--- McCabe Cyclomatic Complexity ---")
 
     # 1. Load inventory
     try:
-        inventory_list = load_inventory()
+        inventory_list = load_inventory(
+            rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+        )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
-        return
+        logger.warning(f"ERROR loading inventory: {e}")
+        return {"report_complexity": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
-        return
+        logger.warning("Inventory is empty.")
+        return {"report_complexity": None}
 
-    print(f"Inventory loaded: {len(inventory_list)} units.")
+    logger.info(f"Inventory loaded: {len(inventory_list)} units.")
 
     # Convert numeric types and group by file
     units_file_map = defaultdict(list)
@@ -108,18 +110,23 @@ def analyze_complexity():
         units_file_map[rel].append(u)
 
     output_data = []
-    audit_path_ = AUDIT_PATH
+    audit_data = inputs.get("audit")  # {rel_path: debug_rows}, from profiler.py — avoids re-reading from disk
+    audit_path_ = Path(results_dir) / "audit"
 
     sorted_files = sorted(units_file_map.keys(), key=str.lower)
 
     for idx, rel_path in enumerate(sorted_files):
         file_name = Path(rel_path).name
-        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
-        debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
 
-        if not debug_file.exists():
-            print(f"  [{idx+1}] No DEBUG file: {file_name} — skipped")
-            continue
+        debug_rows = audit_data.get(rel_path) if audit_data is not None else None
+        if debug_rows is None:
+            debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+            debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
+            if not debug_file.exists():
+                logger.warning(f"  [{idx+1}] No DEBUG file: {file_name} — skipped")
+                continue
+            with open(debug_file, encoding="utf-8-sig") as f:
+                debug_rows = list(csv.DictReader(f))
 
         units_per_file = units_file_map[rel_path]
         units_per_file.sort(key=lambda u: u["Start_Line"])
@@ -127,27 +134,26 @@ def analyze_complexity():
         # Accumulators: each unit starts with base CC = 1
         score = defaultdict(int)
 
-        with open(debug_file, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                try:
-                    n_line = int(row["Line"])
-                except ValueError:
-                    continue
+        for row in debug_rows:
+            try:
+                n_line = int(row["Line"])
+            except ValueError:
+                continue
 
-                kind = row.get("Kind", "")
-                content = row.get("Content", "")
+            kind = row.get("Kind", "")
+            content = row.get("Content", "")
 
-                delta = count_decision_point(kind, content)
-                if not delta:
-                    continue
+            delta = count_decision_point(kind, content)
+            if not delta:
+                continue
 
-                # Scope resolution: innermost unit containing n_line
-                candidates = [u for u in units_per_file if u["Start_Line"] <= n_line <= u["End_Line"]]
-                if not candidates:
-                    continue
-                scope = max(candidates, key=lambda u: u["Start_Line"])["Name"]
+            # Scope resolution: innermost unit containing n_line
+            candidates = [u for u in units_per_file if u["Start_Line"] <= n_line <= u["End_Line"]]
+            if not candidates:
+                continue
+            scope = max(candidates, key=lambda u: u["Start_Line"])["Name"]
 
-                score[scope] += delta
+            score[scope] += delta
 
         # Build output rows for each unit in the file
         for u in units_per_file:
@@ -169,7 +175,15 @@ def analyze_complexity():
     # 3. Sort by CC descending
     output_data.sort(key=lambda x: -x["CC"])
 
-    # 4. Export
+    return {"report_complexity": output_data}
+
+
+def write_complexity(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    output_data = data["report_complexity"]
+    if output_data is None:
+        return
+
     columns = [
         "File",
         "Unit",
@@ -180,32 +194,40 @@ def analyze_complexity():
         "End_Line",
         "Total_Lines",
     ]
+    output_file = Path(results_dir) / "report_complexity.csv"
     try:
-        with open(CSV_OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
+        with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=columns)
             writer.writeheader()
             writer.writerows(output_data)
-        print(f"\nReport generated: {CSV_OUTPUT}")
+        logger.success(f"Report generated: {output_file}")
     except IOError as e:
-        print(f"Error writing CSV: {e}")
+        logger.warning(f"Error writing CSV: {e}")
         return
 
     # 5. Console summary
     from collections import Counter
 
     count = Counter(r["Level"] for r in output_data)
-    cc_vals = [r["CC"] for r in output_data]
 
-    print(f"\nDistribution ({len(output_data)} units):")
+    logger.info(f"Distribution ({len(output_data)} units):")
     for level in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         n = count.get(level, 0)
         if n:
-            print(f"  {level:8}: {n:4}")
+            logger.info(f"  {level:8}: {n:4}")
 
-    print(f"\nTop 10 most complex units:")
+    logger.info("Top 10 most complex units:")
     for r in output_data[:10]:
-        print(f"  CC={r['CC']:5}  {r['Level']:8}  " f"{r['File']:25} {r['Unit']}")
+        logger.info(f"  CC={r['CC']:5}  {r['Level']:8}  " f"{r['File']:25} {r['Unit']}")
+
+
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = analyze_complexity(source_dir, results_dir, inputs=inputs)
+    write_complexity(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":
-    analyze_complexity()
+    main()

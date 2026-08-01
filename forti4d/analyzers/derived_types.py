@@ -3,15 +3,10 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from forti4d.analyzers.inventory import load_inventory
-from forti4d.config import RESULTS_PATH
+from loguru import logger
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-AUDIT_PATH = RESULTS_PATH / "audit"
-DEFS_OUTPUTS = RESULTS_PATH / "type_definitions.csv"
-COMPS_OUTPUTS = RESULTS_PATH / "type_components.csv"
+from forti4d.analyzers.inventory import load_inventory
+from forti4d import config
 
 TYPES_COLS = [
     "File",
@@ -235,19 +230,24 @@ def scope_resolver(n_line: int, units_on_file: list) -> tuple:
 _KINDS_TYPE = {"TYPE_DEFINITION", "VAR_DECLARATION", "END_BLOCK_STMT"}
 
 
-def extract_types():
-    print("--- Derived Types Extraction ---")
+def extract_types(source_dir, results_dir, *, inputs=None) -> dict:
+    """Pure computation. No disk writes. Returns None for both outputs when
+    there's nothing to process (same as the original — no file is written)."""
+    inputs = inputs or {}
+    logger.debug("--- Derived Types Extraction ---")
 
     # 1. Inventory
     try:
-        inventory_list = load_inventory()
+        inventory_list = load_inventory(
+            rows=inputs.get("inventory_report"), csv_path=Path(results_dir) / "inventory_report.csv"
+        )
     except Exception as e:
-        print(f"ERROR loading inventory: {e}")
-        return
+        logger.warning(f"ERROR loading inventory: {e}")
+        return {"type_definitions": None, "type_components": None}
 
     if not inventory_list:
-        print("Inventory is empty.")
-        return
+        logger.warning("Inventory is empty.")
+        return {"type_definitions": None, "type_components": None}
 
     units_map = defaultdict(list)
     for u in inventory_list:
@@ -264,91 +264,106 @@ def extract_types():
 
     rows_types = []
     rows_comps = []
+    audit_data = inputs.get("audit")  # {rel_path: debug_rows}, from profiler.py — avoids re-reading from disk
+    audit_path_ = Path(results_dir) / "audit"
     sorted_files = sorted(units_map.keys(), key=str.lower)
 
     # 2. Process each file with a state machine
     for rel_path in sorted_files:
         file_name = Path(rel_path).name
-        debug_stem = rel_path.replace("/", "__").replace("\\", "__")
-        debug_file = AUDIT_PATH / f"{debug_stem}_DEBUG.csv"
-        if not debug_file.exists():
-            continue
+
+        debug_rows = audit_data.get(rel_path) if audit_data is not None else None
+        if debug_rows is None:
+            debug_stem = rel_path.replace("/", "__").replace("\\", "__")
+            debug_file = audit_path_ / f"{debug_stem}_DEBUG.csv"
+            if not debug_file.exists():
+                continue
+            with open(debug_file, encoding="utf-8-sig") as f:
+                debug_rows = list(csv.DictReader(f))
 
         units_on_file = sorted(units_map[rel_path], key=lambda u: u["Start_Line"])
 
         active_type = None  # dict while inside a TYPE body
 
-        with open(debug_file, encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                kind = row.get("Kind", "")
-                if kind not in _KINDS_TYPE:
+        for row in debug_rows:
+            kind = row.get("Kind", "")
+            if kind not in _KINDS_TYPE:
+                continue
+
+            try:
+                n_line = int(row["Line"])
+            except (ValueError, KeyError):
+                continue
+
+            content = row.get("Content", "")
+
+            if kind == "TYPE_DEFINITION":
+                m = RE_NAME_TYPE.match(content)
+                if not m:
                     continue
+                host_unit, host_tipo = scope_resolver(n_line, units_on_file)
+                active_type = {
+                    "File": file_name,
+                    "Unit": host_unit,
+                    "Unit_Type": host_tipo,
+                    "Start_Line": n_line,
+                    "End_Line": n_line,  # updated when closing
+                    "Type_Name": m.group(1).upper(),
+                    "Components": [],
+                }
 
-                try:
-                    n_line = int(row["Line"])
-                except (ValueError, KeyError):
-                    continue
-
-                content = row.get("Content", "")
-
-                if kind == "TYPE_DEFINITION":
-                    m = RE_NAME_TYPE.match(content)
-                    if not m:
-                        continue
-                    host_unit, host_tipo = scope_resolver(n_line, units_on_file)
-                    active_type = {
-                        "File": file_name,
-                        "Unit": host_unit,
-                        "Unit_Type": host_tipo,
-                        "Start_Line": n_line,
-                        "End_Line": n_line,  # updated when closing
-                        "Type_Name": m.group(1).upper(),
-                        "Components": [],
-                    }
-
-                elif active_type is not None:
-                    if kind == "END_BLOCK_STMT" and RE_END_TYPE.match(content):
-                        active_type["End_Line"] = n_line
-                        # Emit definition
-                        comps = active_type["Components"]
-                        rows_types.append(
+            elif active_type is not None:
+                if kind == "END_BLOCK_STMT" and RE_END_TYPE.match(content):
+                    active_type["End_Line"] = n_line
+                    # Emit definition
+                    comps = active_type["Components"]
+                    rows_types.append(
+                        {
+                            "File": active_type["File"],
+                            "Unit": active_type["Unit"],
+                            "Unit_Type": active_type["Unit_Type"],
+                            "Start_Line": active_type["Start_Line"],
+                            "End_Line": active_type["End_Line"],
+                            "Type_Name": active_type["Type_Name"],
+                            "N_Components": len(comps),
+                        }
+                    )
+                    for comp in comps:
+                        rows_comps.append(
                             {
-                                "File": active_type["File"],
-                                "Unit": active_type["Unit"],
-                                "Unit_Type": active_type["Unit_Type"],
-                                "Start_Line": active_type["Start_Line"],
-                                "End_Line": active_type["End_Line"],
+                                "File": file_name,
                                 "Type_Name": active_type["Type_Name"],
-                                "N_Components": len(comps),
+                                **comp,
                             }
                         )
-                        for comp in comps:
-                            rows_comps.append(
-                                {
-                                    "File": file_name,
-                                    "Type_Name": active_type["Type_Name"],
-                                    **comp,
-                                }
-                            )
-                        active_type = None
+                    active_type = None
 
-                    elif kind == "VAR_DECLARATION":
-                        pos_ini = len(active_type["Components"]) + 1
-                        nuevos = parse_component(content, n_line, pos_ini)
-                        active_type["Components"].extend(nuevos)
+                elif kind == "VAR_DECLARATION":
+                    pos_ini = len(active_type["Components"]) + 1
+                    nuevos = parse_component(content, n_line, pos_ini)
+                    active_type["Components"].extend(nuevos)
+
+    return {"type_definitions": rows_types, "type_components": rows_comps}
+
+
+def write_types(results_dir, data: dict) -> None:
+    """Only place that touches disk for this step."""
+    rows_types = data["type_definitions"]
+    if rows_types is None:
+        return  # inventory empty / load error — nothing written at all, same as before
+
+    results_dir = Path(results_dir)
+    rows_comps = data["type_components"]
 
     # 3. Export CSVs
-    _write_csv(DEFS_OUTPUTS, rows_types, TYPES_COLS)
-    _write_csv(COMPS_OUTPUTS, rows_comps, COMPS_COLS)
+    _write_csv(results_dir / "type_definitions.csv", rows_types, TYPES_COLS)
+    _write_csv(results_dir / "type_components.csv", rows_comps, COMPS_COLS)
 
-    n_types = len(rows_types)
-    n_comps = len(rows_comps)
-    print(f"Derived types           : {n_types}")
-    print(f"Total components        : {n_comps}")
-    print()
-    print("Generated:")
-    print(f"  {DEFS_OUTPUTS}")
-    print(f"  {COMPS_OUTPUTS}")
+    logger.info(f"Derived types           : {len(rows_types)}")
+    logger.info(f"Total components        : {len(rows_comps)}")
+    logger.success("Generated:")
+    logger.success(f"  {results_dir / 'type_definitions.csv'}")
+    logger.success(f"  {results_dir / 'type_components.csv'}")
 
 
 # =============================================================================
@@ -361,7 +376,7 @@ def _write_csv(path: Path, rows: list, columns: list):
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"  → {path.name}  ({len(rows)} rows)")
+    logger.debug(f"  → {path.name}  ({len(rows)} rows)")
 
 
 # =============================================================================
@@ -369,8 +384,12 @@ def _write_csv(path: Path, rows: list, columns: list):
 # =============================================================================
 
 
-def main():
-    extract_types()
+def main(source_dir=None, results_dir=None, *, inputs=None):
+    """Entry point for both CLI standalone use and the in-process orchestrator."""
+    source_dir, results_dir = config.resolve_paths(source_dir, results_dir)
+    data = extract_types(source_dir, results_dir, inputs=inputs)
+    write_types(results_dir, data)
+    return data
 
 
 if __name__ == "__main__":

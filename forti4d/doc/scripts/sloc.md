@@ -71,3 +71,14 @@ with more than 50 logical statements indicate poorly documented code.
 **CC_SLOC** (in `report_consolidated.csv`) = `CC / SLOC_net`. Measures
 cyclomatic complexity density — how many decision points exist per logical
 statement. More useful than raw CC for comparing units of different sizes.
+
+---
+
+## Notes
+
+- **LOC vs inventory Total_Lines:** `sloc.py`'s `LOC` column counts physical
+  lines by reading each source file directly. This differs from the
+  `Total_Lines` value in `inventory_report.csv` (`End_Line - Start_Line + 1`),
+  which is a structural range estimate. `executive_summary.py` uses the
+  inventory figure; `sloc.py` uses the physical count. The two will not always
+  agree, and that is expected — they measure different things.
