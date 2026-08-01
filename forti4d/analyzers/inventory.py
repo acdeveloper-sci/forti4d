@@ -404,26 +404,26 @@ def analyze_inventory(source_dir: Path, *, workers: int = 1) -> list:
 
 def write_inventory(results_dir: Path, rows: list) -> None:
     """Only place that touches disk for this step. Same fields, same file, same behavior as before."""
+    fields = [
+        "File",
+        "Relative_Path",
+        "Type",
+        "Name",
+        "Parent",
+        "Start_Line",
+        "End_Line",
+        "Total_Lines",
+        "Legacy",
+        "IO",
+        "Custom",
+    ]
+    output_file = results_dir / "inventory_report.csv"
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
     if rows:
-        fields = [
-            "File",
-            "Relative_Path",
-            "Type",
-            "Name",
-            "Parent",
-            "Start_Line",
-            "End_Line",
-            "Total_Lines",
-            "Legacy",
-            "IO",
-            "Custom",
-        ]
-        output_file = results_dir / "inventory_report.csv"
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(rows)
         logger.success(f"Report generated: {output_file}")
 
 

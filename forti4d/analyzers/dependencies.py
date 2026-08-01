@@ -268,7 +268,7 @@ def load_inventory_enhanced(rows=None, results_dir=None) -> Tuple[Dict, Dict, Li
 
     for row in rows:
         name = row.get("Name", "").strip().upper()
-        file = row.get("File", "").strip()
+        file = row.get("Relative_Path", row.get("File", "")).strip()
         utype = row.get("Type", "").strip().upper()
         # READ THE PARENT (if column does not exist, assume GLOBAL for compatibility)
         parent = row.get("Parent", "GLOBAL").strip().upper()

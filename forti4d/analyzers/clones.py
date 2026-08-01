@@ -10,7 +10,6 @@ Output: report_clones.csv  — one row per (unit, file_A, file_B) pair.
 """
 
 import csv
-import hashlib
 from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -31,37 +30,33 @@ SIMILAR_THRESHOLD = 0.80
 
 
 def build_file_index(path: Path) -> dict:
-    """Returns dict: basename → full Path for all Fortran source files."""
+    """Returns dict: relative_path_string → full Path for all Fortran source files."""
     index = {}
     for f in path.rglob("*"):
         if f.suffix.lower() in (".f90", ".f", ".for", ".f77", ".f95", ".f03"):
-            index[f.name] = f
+            index[str(f.relative_to(path))] = f
     return index
 
 
-def extract_lines_unit(path: Path, start: int, end: int) -> list:
+def _extract_from_cache(path: Path, start: int, end: int, cache: dict) -> list:
     """
-    Reads a Fortran source file and returns the normalized logical lines
-    belonging to the unit at [start, end].
-
-    Normalization: comments and blank lines removed, whitespace collapsed,
-    text uppercased.
+    Returns normalized logical lines for the unit at [start, end], using
+    cache to avoid re-parsing the same file multiple times within a run.
     """
-    try:
-        logical_lines = read_logical_lines(str(path))
-    except Exception:
-        return []
-
+    if path not in cache:
+        try:
+            cache[path] = read_logical_lines(str(path))
+        except Exception:
+            cache[path] = []
     result = []
-    for ll in logical_lines:
+    for ll in cache[path]:
         if ll.start_line < start:
             continue
         if ll.start_line > end:
             break
         if ll.is_comment or not ll.text.strip():
             continue
-        standardized = " ".join(ll.text.upper().split())
-        result.append(standardized)
+        result.append(" ".join(ll.text.upper().split()))
     return result
 
 
@@ -87,11 +82,9 @@ def classify(ratio: float) -> str:
 
 
 def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
-    """Pure computation. No disk writes. Returns None for report_clones when
-    the inventory is empty (same as the original — no file is written in
-    that case, a known inconsistency not fixed in this migration); an empty
-    list when there are no ambiguities/duplicates (headers-only file is
-    still written in that case, same as the original)."""
+    """Pure computation. No disk writes. Returns an empty list when there are
+    no results (inventory empty, no ambiguities, or no groups with >= 2 files),
+    which causes write_clones to write a headers-only CSV."""
     inputs = inputs or {}
     Path(results_dir).mkdir(parents=True, exist_ok=True)
 
@@ -101,12 +94,12 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
     )
     if not inventory_list:
         logger.warning("ERROR: inventory is empty. Run inventory.py first.")
-        return {"report_clones": None}
+        return {"report_clones": []}
 
-    # Index: (file_basename, name_upper) → {type, start, end}
+    # Index: (relative_path, name_upper) → {type, start, end}
     inv_idx = {}
     for row in inventory_list:
-        key = (row["File"], row["Name"].upper())
+        key = (row.get("Relative_Path", row["File"]), row["Name"].upper())
         inv_idx[key] = {
             "type": row["Type"],
             "start": int(row["Start_Line"]),
@@ -123,7 +116,7 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
         with open(ambiguities_path, encoding="utf-8-sig") as f:
             ambiguities_rows = list(csv.DictReader(f))
 
-    groups = []  # [(name, utype, [file1, file2, ...])]
+    groups = []  # [(name, utype, [rel_path1, rel_path2, ...])]
     for row in ambiguities_rows:
         name = row["Unit_Name"].strip().upper()
         utype = row["Type"].strip()
@@ -135,10 +128,11 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
         logger.info("No duplicate units found.")
         return {"report_clones": []}
 
-    # Build file path index
+    # Build file path index: relative_path_string → full Path
     file_idx = build_file_index(source_dir)
 
-    # Pairwise comparisons
+    # Pairwise comparisons with per-run file parse cache
+    _parse_cache = {}
     rows = []
     for name, utype, files in groups:
         for i in range(len(files)):
@@ -156,8 +150,8 @@ def analyze_clones(source_dir, results_dir, *, inputs=None) -> dict:
                 if not path_a or not path_b:
                     continue
 
-                lines_a = extract_lines_unit(path_a, info_a["start"], info_a["end"])
-                lines_b = extract_lines_unit(path_b, info_b["start"], info_b["end"])
+                lines_a = _extract_from_cache(path_a, info_a["start"], info_a["end"], _parse_cache)
+                lines_b = _extract_from_cache(path_b, info_b["start"], info_b["end"], _parse_cache)
 
                 ratio = similarity(lines_a, lines_b)
                 status = classify(ratio)
@@ -186,9 +180,6 @@ def write_clones(results_dir, data: dict) -> None:
     """Only place that touches disk for this step."""
     rows = data["report_clones"]
     columns = ["Unit", "Type", "File_A", "File_B", "SLOC_A", "SLOC_B", "Similarity_Pct", "Status"]
-
-    if rows is None:
-        return  # inventory empty — nothing written at all, same as before
 
     output_file = Path(results_dir) / "report_clones.csv"
 
